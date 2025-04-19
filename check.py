@@ -4,7 +4,7 @@ import subprocess
 import os
 import time
 import transformers
-import vllm
+# import vllm
 import re
 import sys
 import torch
@@ -19,7 +19,9 @@ import openai
 import tiktoken
 import tempfile
 
-openai.api_key = ""  # Fill openai API key
+os.system("source .env")
+# openai.api_key = ""  # Fill openai API key
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 os.environ["TOKENIZERS_PARALLELISM"] = "true"  
 
