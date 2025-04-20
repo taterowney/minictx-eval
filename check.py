@@ -3,7 +3,7 @@ import heapq
 import subprocess
 import os
 import time
-import transformers
+# import transformers
 # import vllm
 import re
 import sys
@@ -15,13 +15,14 @@ from tqdm import tqdm, trange
 from repl_wrapper import InteractiveThread
 from premise_retriever import retrieve
 
-import openai
+from openai import AzureOpenAI
 import tiktoken
 import tempfile
 
+
 os.system("source .env")
 # openai.api_key = ""  # Fill openai API key
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# openai.api_key = os.getenv("OPENAI_API_KEY")
 
 os.environ["TOKENIZERS_PARALLELISM"] = "true"  
 
@@ -90,10 +91,26 @@ def get_premises(example, premise_path):
     return project_premises
 
 def generate_api(prompt, model, temperatures, num_samples, max_tokens=256):
+    # print("Generating API response...")
     texts, scores = [], []
+    azure_client = AzureOpenAI(
+        api_key = os.getenv("AZURE_OPENAI_API_KEY"),  
+        api_version = "2024-10-21",
+        azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+    )
     for temperature in temperatures:
         # Prepare API request parameters
-        responses = openai.chat.completions.create(
+        # responses = openai.chat.completions.create(
+        #     model=model,
+        #     messages=[
+        #         {"role": "system", "content": "You are a helpful assistant who is an expert in the Lean theorem prover."},
+        #         {"role": "user", "content": prompt}
+        #     ],
+        #     max_tokens=max_tokens,
+        #     temperature=temperature,
+        #     n=num_samples,
+        # )
+        responses = azure_client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": "You are a helpful assistant who is an expert in the Lean theorem prover."},
@@ -103,13 +120,19 @@ def generate_api(prompt, model, temperatures, num_samples, max_tokens=256):
             temperature=temperature,
             n=num_samples,
         )
-
         for choice in responses.choices:
             content = choice.message.content
             texts.append(content)
             scores.append(0)
 
+
     texts, scores = _unique_sorted(texts, scores)
+    # print("API response generated.")
+    for i, text in enumerate(texts):
+        print(f"Response {i+1}:")
+        print(text)
+        print("Score:", scores[i])
+        print()
     return texts, scores
 
 def process_responses_GPT4o(responses):
