@@ -3,7 +3,7 @@ import heapq
 import subprocess
 import os
 import time
-# import transformers
+import transformers
 # import vllm
 import re
 import sys
@@ -15,10 +15,11 @@ from tqdm import tqdm, trange
 from repl_wrapper import InteractiveThread
 from premise_retriever import retrieve
 
-from openai import AzureOpenAI
+# from openai import AzureOpenAI
 import tiktoken
 import tempfile
 
+from api_models import prompt_model, API_MODELS
 
 os.system("source .env")
 # openai.api_key = ""  # Fill openai API key
@@ -52,16 +53,21 @@ def _load_data(dataset_name, dataset_path):
     return data
 
 def truncate_middle(text, tokenizer, max_tokens=8000):
-    tokens = tokenizer.encode(text)
-    if len(tokens) <= max_tokens:
-        return text
+    if tokenizer:
+        tokens = tokenizer.encode(text)
+        if len(tokens) <= max_tokens:
+            return text
 
-    keep_tokens = max_tokens // 2
-    head_tokens = tokens[:keep_tokens]
-    tail_tokens = tokens[-keep_tokens:]
+        keep_tokens = max_tokens // 2
+        head_tokens = tokens[:keep_tokens]
+        tail_tokens = tokens[-keep_tokens:]
 
-    truncated_text = tokenizer.decode(head_tokens) + "..." + tokenizer.decode(tail_tokens)
-    return truncated_text
+        truncated_text = tokenizer.decode(head_tokens) + "..." + tokenizer.decode(tail_tokens)
+        return truncated_text
+    else:
+        if len(text) <= max_tokens:
+            return text
+        return text[:max_tokens] + "..." + text[-max_tokens:]
 
 def discard_after_marker(text, marker='/- BEGIN EXERCISES -/\n'):
     marker_index = text.find(marker)
@@ -90,52 +96,52 @@ def get_premises(example, premise_path):
         project_premises += [premise["declaration"] for premise in premises]
     return project_premises
 
-def generate_api(prompt, model, temperatures, num_samples, max_tokens=256):
-    # print("Generating API response...")
-    texts, scores = [], []
-    azure_client = AzureOpenAI(
-        api_key = os.getenv("AZURE_OPENAI_API_KEY"),  
-        api_version = "2024-10-21",
-        azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-    )
-    for temperature in temperatures:
-        # Prepare API request parameters
-        # responses = openai.chat.completions.create(
-        #     model=model,
-        #     messages=[
-        #         {"role": "system", "content": "You are a helpful assistant who is an expert in the Lean theorem prover."},
-        #         {"role": "user", "content": prompt}
-        #     ],
-        #     max_tokens=max_tokens,
-        #     temperature=temperature,
-        #     n=num_samples,
-        # )
-        responses = azure_client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant who is an expert in the Lean theorem prover."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=max_tokens,
-            temperature=temperature,
-            n=num_samples,
-        )
-        for choice in responses.choices:
-            content = choice.message.content
-            texts.append(content)
-            scores.append(0)
+# def generate_api(prompt, model, temperatures, num_samples, max_tokens=256):
+#     # print("Generating API response...")
+#     texts, scores = [], []
+#     azure_client = AzureOpenAI(
+#         api_key = os.getenv("AZURE_OPENAI_API_KEY"),
+#         api_version = "2024-10-21",
+#         azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+#     )
+#     for temperature in temperatures:
+#         # Prepare API request parameters
+#         # responses = openai.chat.completions.create(
+#         #     model=model,
+#         #     messages=[
+#         #         {"role": "system", "content": "You are a helpful assistant who is an expert in the Lean theorem prover."},
+#         #         {"role": "user", "content": prompt}
+#         #     ],
+#         #     max_tokens=max_tokens,
+#         #     temperature=temperature,
+#         #     n=num_samples,
+#         # )
+#         responses = azure_client.chat.completions.create(
+#             model=model,
+#             messages=[
+#                 {"role": "system", "content": "You are a helpful assistant who is an expert in the Lean theorem prover."},
+#                 {"role": "user", "content": prompt}
+#             ],
+#             max_tokens=max_tokens,
+#             temperature=temperature,
+#             n=num_samples,
+#         )
+#         for choice in responses.choices:
+#             content = choice.message.content
+#             texts.append(content)
+#             scores.append(0)
+#
+#
+#     texts, scores = _unique_sorted(texts, scores)
+#     # print("API response generated.")
+#     for i, text in enumerate(texts):
+#         print(f"Response {i+1}:")
+#         print(text)
+#         print("Score:", scores[i])
+#         print()
+#     return texts, scores
 
-
-    texts, scores = _unique_sorted(texts, scores)
-    # print("API response generated.")
-    for i, text in enumerate(texts):
-        print(f"Response {i+1}:")
-        print(text)
-        print("Score:", scores[i])
-        print()
-    return texts, scores
-
-def process_responses_GPT4o(responses):
+def process_responses_api(responses):
     processed_responses = []
     for response in responses[0]:
         pattern = re.compile(r'```lean(.*?)```', re.DOTALL | re.IGNORECASE)
@@ -193,7 +199,7 @@ def _prompt_fewshot(tokenizer, theorem_statement, ctx = None, state = None, tact
         return prompt
     elif task == "tactic_prediction_context":
         ctx = discard_after_marker(ctx)  # Discard exercise context for HTPI
-        ctx = truncate_middle(ctx, tokenizer)
+        ctx = truncate_middle(ctx, tokenizer, max_tokens=2000000)
         ctx = ctx + theorem_statement + "\n  " + "\n  ".join(tactics)
         if premises != None:
             premises_str = "\n".join(premises)
@@ -201,7 +207,7 @@ def _prompt_fewshot(tokenizer, theorem_statement, ctx = None, state = None, tact
         else:
             prompt = prompt.format(ctx, state)
 
-        print(prompt)
+        # print(prompt)
         return prompt
     elif task == "full_proof_context":
         if premises != None:
@@ -209,7 +215,7 @@ def _prompt_fewshot(tokenizer, theorem_statement, ctx = None, state = None, tact
             prompt = prompt.format(ctx, premises_str, theorem_statement)
         else:
             prompt = prompt.format(ctx, theorem_statement)
-        prompt = truncate_middle(prompt, tokenizer)
+        prompt = truncate_middle(prompt, tokenizer, max_tokens=2000000)
         return prompt
     elif task == "full_proof":
         prompt = prompt.format(theorem_statement)
@@ -293,10 +299,13 @@ def evaluation_API(example, task, thread_id, repl_path, lean_env_path, premise_p
 
     prompt = prompt_fn(tokenizer, theorem_statement, imports, retrieved_premises, task=task)
 
-    responses = generate_api(prompt, model, [temperature], num_samples, max_tokens)
-    responses = process_responses_GPT4o(responses)
-    
+    # responses = generate_api(prompt, model, [temperature], num_samples, max_tokens)
+    responses = prompt_model(prompt, model, [temperature], num_samples, max_tokens)
+    responses = process_responses_api(responses)
+
     for response in responses:
+        if theorem_statement not in response:
+            response = theorem_statement  + response
         with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp:
             json.dump({"cmd": remove_last_comment(imports)}, temp, ensure_ascii=False)
             temp.write("\n\n")
@@ -306,15 +315,19 @@ def evaluation_API(example, task, thread_id, repl_path, lean_env_path, premise_p
             temp_name = temp.name
         
         command = f'lake env {repl_path}/.lake/build/bin/repl < {temp_name}'
+        # print(command)
         try:
             result = subprocess.run(command, shell=True, capture_output=True, text=True, cwd=lean_env_path, timeout=60)
 
             result_dict = result.stdout.split("\n\n")
+            # print(result_dict)
             env = json.loads(result_dict[0])
             output = json.loads(result_dict[1])
-        except:
+        except Exception as e:
+            # print(f"Error while running repl: {e}")
             continue
-        if env == None: 
+        if env == None:
+            # print("No environment")
             continue
         env_error = []
 
@@ -411,7 +424,7 @@ def best_first_search(example, task, thread_id, repl_path, lean_env_path, premis
 
 def _print_output(example, out, task):
     print(out)
-    if 'proof' in out:
+    if 'proof' in out and out['proof'] != None:
         if "tactic_prediction" in task:
             print(example['theoremStatement'] + ' := by\n  ' + '\n  '.join(out['proof']))
         if "full_proof" in task:
@@ -447,7 +460,7 @@ if __name__ == "__main__":
         '--dataset-name',
         default='mathlib'
     )
-    parser.add_argument('--dataset-path', default='data/mathlib.jsonl')
+    parser.add_argument('--dataset-path', default='data/minictx2/test/mathlib.jsonl')
     parser.add_argument('--premise-path', default=None)
     parser.add_argument('--output-dir', default='output/mathlib')
     parser.add_argument('--tp-degree', type=int, default=1)
@@ -462,17 +475,20 @@ if __name__ == "__main__":
 
     use_API = False
 
-    if "gpt" in args.model_name:
+    if args.model_name.strip() in API_MODELS:
         use_API = True
         model = args.model_name
-        tokenizer = tiktoken.encoding_for_model(args.model_name) 
+        if "gpt" in args.model_name:
+            tokenizer = tiktoken.encoding_for_model(args.model_name)
+        else:
+            tokenizer = None
         evaluation = evaluation_API
     else:
         model, tokenizer = _load_model(args.model_name, args.tp_degree)
         evaluation = best_first_search
 
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     device = torch.device("cpu")
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if args.premise_path:   #use premise if premise path is not None
         re_tokenizer = transformers.AutoTokenizer.from_pretrained("kaiyuy/leandojo-lean4-retriever-byt5-small")
@@ -492,7 +508,7 @@ if __name__ == "__main__":
     for example in examples:
         example["full_name"] = get_full_name(example["theoremStatement"])
         count += 1
-        out = evaluation(example, args.task, thread_id, args.repl_path, args.lean_env_path, args.premise_path, model, tokenizer, re_model, re_tokenizer, prompt_fn, args.temperatures, args.num_samples, max_iters = args.max_iters)
+        out = evaluation(example, args.task, thread_id, os.path.abspath(args.repl_path), args.lean_env_path, args.premise_path, model, tokenizer, re_model, re_tokenizer, prompt_fn, args.temperatures, args.num_samples, max_iters = args.max_iters)
         if out['success']: 
             successes += 1
             example["proof"] = out

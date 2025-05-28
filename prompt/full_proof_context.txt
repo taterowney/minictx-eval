@@ -296,8 +296,8 @@ theorem mul_dvd_mul_left (a : α) (h : b ∣ c) : a * b ∣ a * c := by
 
 
 /- Now here is your exercise. There is no need to restate the problem. If needed, think through the proof using comments. -/
-#Context:
+-- #Context:
 {}
 
-#Problem:
+-- #Problem (remember to output ONLY the proof; DO NOT restate the problem or the ":=" (but don't forget to add the "by" keyword at the beginning if the proof uses tactic mode). Put all code you write in ```lean ... ``` blocks):
 {}
