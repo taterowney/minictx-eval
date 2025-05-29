@@ -4,6 +4,7 @@ import os, json, time
 from datetime import datetime
 
 
+
 load_dotenv()
 if not os.getenv("AZURE_OPENAI_API_KEY"):
     raise EnvironmentError("AZURE_OPENAI_API_KEY environment variable not set.")
