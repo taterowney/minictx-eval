@@ -156,7 +156,7 @@ class Client:
 
     def to_vLLM_format(self, kwargs):
         from vllm import SamplingParams
-        return SamplingParams(kwargs)
+        return SamplingParams(**kwargs)
 
     def from_vLLM_format(self, outputs):
         """
@@ -184,6 +184,6 @@ if __name__ == "__main__":
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "What is the capital of France?"}
     ]
-    # print(client.get_response(messages, temperature=0.7, max_tokens=50, n=1))
-    print(client.get_response(messages))
+    print(client.get_response(messages, temperature=0.7, max_tokens=50, n=1))
+    # print(client.get_response(messages))
 
