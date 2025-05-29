@@ -160,6 +160,11 @@ class Client:
         res = self.get_raw_response(messages, **kwargs)
         return res.choices[0].message.content
 
+    def infer_batch(self, messages_list, **kwargs):
+        if self.model_source == "azure":
+            from azure_batch_inference import batch_inference
+            return batch_inference(self.model_name, messages_list, resume_in_progress=True, resume_complete=False, **self.to_OpenAI_format(kwargs))
+
     def to_OpenAI_format(self, kwargs):
         """
         Convert the kwargs to OpenAI format.

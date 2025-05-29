@@ -91,7 +91,7 @@ def _get_output_file(dataset_name):
 def _truncate_middle(text, max_tokens):
     """
     Truncates the middle of the text to fit within the max_tokens limit.
-    Since most of minictx is in English, we have around 4 characters per token on average (https://platform.openai.com/tokenizer), with minor variation between model vendors.
+    Since most of minictx is in English, we have around 4 characters per token on average (https://platform.openai.com/tokenizer), with pretty minor variation between model vendors.
     """
     tokens = text.split()
     if len(tokens) <= max_tokens*4:
@@ -117,7 +117,7 @@ def load_data(dataset_name, path_to_data=MINICTX2_PATH):
 
 
 # def evaluation_loop(dataset_name, model_name, task, dataset_path, prompt_fn=_prompt_fewshot, repl_path=os.path.join(os.getcwd(), "repl"), lean_env_path=None, log_output=True, output_dir=None):
-def evaluation_loop(model_name, task="full_proof_context", dataset_name="mathlib", dataset_path=MINICTX2_PATH, log_output=True, output_dir=None, num_samples=32, repl_path=os.path.join(os.getcwd(), "repl"), lean_env_path=None):
+def evaluation_loop(model_name, task="full_proof_context", dataset_name="mathlib", dataset_path=MINICTX2_PATH, log_output=True, output_dir=None, num_samples=32, repl_path=os.path.join(os.getcwd(), "repl"), lean_env_path=None, use_batch_inference=False):
     """ Loads a dataset, evaluates the model on each task in it, and evaluates responses. """
 
     # Initialize a client (this will handle local vs API models)
@@ -144,10 +144,39 @@ def evaluation_loop(model_name, task="full_proof_context", dataset_name="mathlib
 
     # Evaluate examples in parallel...
     successes = 0
-    with ThreadPoolExecutor() as executor:
-        futures = []
+    responses = []
+    if not use_batch_inference:
+        with ThreadPoolExecutor() as executor:
+            futures = []
+            for example in data:
+        # for example in tqdm.tqdm(data, desc=f"Evaluating {dataset_name} with {model_name}"):
+                theorem_statement = example["theoremStatement"] + " := "
+                context = example.get("srcContext", "")
+                prompt = prompt_fn(theorem_statement, context, task=task)
+                prompt = _truncate_middle(prompt, context_window)
+
+                system_prompt = _load_system_prompt()
+
+                # ...get the model's responses...
+                futures.append(executor.submit(
+                    client.get_raw_response,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": prompt}
+                        ],
+                        n=num_samples
+                    )
+                )
+
+            for f in tqdm.tqdm(futures, desc=f"Evaluating {dataset_name} with {model_name}"):
+                response = f.result()
+                print(response)
+                responses.append(response)
+
+    else:
+        # Use batch inference for the model
+        messages_list = []
         for example in data:
-    # for example in tqdm.tqdm(data, desc=f"Evaluating {dataset_name} with {model_name}"):
             theorem_statement = example["theoremStatement"] + " := "
             context = example.get("srcContext", "")
             prompt = prompt_fn(theorem_statement, context, task=task)
@@ -155,41 +184,34 @@ def evaluation_loop(model_name, task="full_proof_context", dataset_name="mathlib
 
             system_prompt = _load_system_prompt()
 
-            # ...get the model's responses...
-            futures.append(executor.submit(
-                client.get_raw_response,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt}
-                    ],
-                    n=num_samples
-                )
-            )
+            messages_list.append([
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ])
 
-        for f in tqdm.tqdm(futures, desc=f"Evaluating {dataset_name} with {model_name}"):
-            response = f.result()
-            print(response)
+        responses = client.infer_batch(messages_list, n=num_samples)
 
-            proofs = _unique(_extract_proof(res.message.content, theorem_statement) for res in response.choices)
+    for i, response in enumerate(responses):
+        proofs = _unique(_extract_proof(res.message.content, theorem_statement) for res in response.choices)
 
-            # ...and see if any of them work
-            with ThreadPoolExecutor() as executor2:
-                futures = [executor2.submit(evaluate_repl, context, theorem_statement + p, repl_path=repl_path, lean_env_path=lean_env_path) for p in proofs]
-                results = [future.result() for future in futures]
+        # ...and see if any of them work
+        with ThreadPoolExecutor() as executor2:
+            futures = [executor2.submit(evaluate_repl, context, theorem_statement + p, repl_path=repl_path, lean_env_path=lean_env_path) for p in proofs]
+            results = [future.result() for future in futures]
 
-            has_proven = False
-            proof_data = {}
-            for proof, result in zip(proofs, results):
-                if result["success"]:
-                    successes += 1
-                    has_proven = True
-                    proof_data = {"success": True, "proof": proof}
-                    break
-            if not has_proven:
-                proof_data = {"success": False, "proof": proofs[0]} # Figured it would be useful to see where it's going wrong
+        has_proven = False
+        proof_data = {}
+        for proof, result in zip(proofs, results):
+            if result["success"]:
+                successes += 1
+                has_proven = True
+                proof_data = {"success": True, "proof": proof}
+                break
+        if not has_proven:
+            proof_data = {"success": False, "proof": proofs[0]} # Figured it would be useful to see where it's going wrong
 
-            example["full_name"] = _get_full_name(theorem_statement)
-            example["proof"] = proof_data
+        example["full_name"] = _get_full_name(theorem_statement)
+        example["proof"] = proof_data
 
     print(f"""{'-'*20} SUMMARY {'-'*20}
 Dataset: {dataset_name}
@@ -207,7 +229,6 @@ Score: {successes} correct out of {len(data)} ({successes/len(data)*100:.2f}%)
             for example in data:
                 f.write(json.dumps(example) + "\n")
         print(f"Results saved to {output_file}")
-
 
 
 if __name__ == "__main__":
@@ -233,6 +254,7 @@ if __name__ == "__main__":
     # parser.add_argument('--temperatures', type=float, default=0.0)
     parser.add_argument('--repl-path', default=os.path.join(os.getcwd(), "repl"))
     parser.add_argument('--lean-env-path', default=None)
+    parser.add_argument('--use-batch-inference', type=bool, default=False)
 
     args = parser.parse_args()
 
@@ -245,10 +267,11 @@ if __name__ == "__main__":
         output_dir=args.output_dir,
         num_samples=args.num_samples,
         repl_path=args.repl_path,
-        lean_env_path=args.lean_env_path
+        lean_env_path=args.lean_env_path,
+        use_batch_inference=args.use_batch_inference
     )
 
     # python3 check_new.py --model-name "gemini-2.5-flash-preview-05-20" --dataset-name "mathlib"
     # python3 check_new.py --model-name "gemini-2.5-pro-preview-05-06" --dataset-name "mathlib"
-    # python3 check_new.py --model-name "o4-mini" --dataset-name "mathlib"
+    # python3 check_new.py --model-name "o4-mini-global-batch" --dataset-name "mathlib" --num-samples 32 --use-batch-inference True
 
