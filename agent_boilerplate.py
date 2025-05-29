@@ -176,14 +176,14 @@ class Client:
         from vllm import SamplingParams
         return SamplingParams(**kwargs)
 
-    def from_vLLM_format(self, responses):
+    def from_vLLM_format(self, outputs):
         """
         Convert vLLM SamplingParams to OpenAI format.
         """
 
         choices = []
-        for i, response in enumerate(responses):
-            message = ChatCompletionMessage(role="assistant", content=response)
+        for i, response in enumerate(outputs[0].outputs):
+            message = ChatCompletionMessage(role="assistant", content=response.text)
             choice = ChatCompletionChoice(
                 finish_reason="stop",
                 index=i,
