@@ -2,6 +2,24 @@ import os, re
 import openai
 from openai.types import chat
 from concurrent.futures import ThreadPoolExecutor
+from pydantic import BaseModel, Field
+
+
+# OpenAI doesn't want to use 'em, Azure can't live without 'em :(
+class ChatCompletionMessage(BaseModel):
+    role: str = Field(..., description="Role of the message sender, e.g., 'user', 'assistant', 'system'.")
+    content: str = Field(..., description="Content of the message.")
+    name: str | None = Field(None, description="Optional name of the message sender.")
+    function_call: dict | None = Field(None, description="Optional function call information if applicable.")
+
+class ChatCompletionChoice(BaseModel):
+    finish_reason: str
+    index: int
+    message: ChatCompletionMessage
+
+class ChatCompletionResponse(BaseModel):
+    choices: list[ChatCompletionChoice]
+
 
 
 def get_model_vendor(model_name, is_api=False):
@@ -158,24 +176,22 @@ class Client:
         from vllm import SamplingParams
         return SamplingParams(**kwargs)
 
-    def from_vLLM_format(self, outputs):
+    def from_vLLM_format(self, responses):
         """
         Convert vLLM SamplingParams to OpenAI format.
         """
-        res = openai.ChatCompletion()
-        for i, output in enumerate(outputs[0].outputs):
-            text = output.text.replace(self.tokenizer.eos_token, '')
-            res.choices.append(
-                chat.chat_completion.Choice(
-                    finish_reason="stop",
-                    index=i,
-                    message=chat.ChatCompletionMessage(
-                        role="assistant",
-                        content=text
-                    )
-                )
+
+        choices = []
+        for i, response in enumerate(responses):
+            message = ChatCompletionMessage(role="assistant", content=response)
+            choice = ChatCompletionChoice(
+                finish_reason="stop",
+                index=i,
+                message=message
             )
-        return res
+            choices.append(choice)
+
+        return ChatCompletionResponse(choices=choices)
 
 
 if __name__ == "__main__":
