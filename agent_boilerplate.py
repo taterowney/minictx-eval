@@ -1,5 +1,6 @@
 import os, re
 import openai
+from openai.types import chat
 from concurrent.futures import ThreadPoolExecutor
 
 
@@ -123,6 +124,14 @@ class Client:
                     raise ValueError(f"\"{self.model_name}\" does not appear to be a valid OpenAI model. Visit https://platform.openai.com/docs/models for a list of available models, or specify the model source manually. If you're using Azure, make sure you have setup a deployment for the model in your Azure OpenAI resource, and that you are using the deployment name as the model name.")
                 else:
                     raise e
+        elif self.model_source == "vllm":
+            params = self.to_vLLM_format(kwargs)
+            outputs = self.client.chat(
+                messages,
+                sampling_params=params,
+                use_tqdm=False,
+            )
+            return self.from_vLLM_format(outputs)
         else:
             assert False
 
@@ -144,8 +153,35 @@ class Client:
                 kwargs["extra_body"][kw] = kwargs[kw]
         return kwargs
 
+    def to_vLLM_format(self, kwargs):
+        from vllm import SamplingParams
+        return SamplingParams(kwargs)
+
+    def from_vLLM_format(self, outputs):
+        """
+        Convert vLLM SamplingParams to OpenAI format.
+        """
+        res = openai.ChatCompletion()
+        for i, output in enumerate(outputs[0].outputs):
+            text = output.text.replace(self.tokenizer.eos_token, '')
+            res.choices.append(
+                chat.chat_completion.Choice(
+                    finish_reason="stop",
+                    index=i,
+                    message=chat.ChatCompletionMessage(
+                        role="assistant",
+                        content=text
+                    )
+                )
+            )
+        return res
+
 
 if __name__ == "__main__":
-    # Example usage
-    client = Client(model_name="o5-mini", model_source="azure")
-    print(client.get_response("What is the capital of France?"))
+    client = Client("deepseek-ai/DeepSeek-R1-Distill-Qwen-7B")
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "What is the capital of France?"}
+    ]
+    print(client.get_response(messages, temperature=0.7, max_tokens=50, n=1))
+
