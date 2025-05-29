@@ -17,13 +17,13 @@ def get_model_vendor(model_name, is_api=False):
             raise ValueError(f"Unsupported API model name: {model_name}")
         return "vllm"
 
-    # stop=["\n\n\n", "---", "[/TAC]"]
+
     # params = vllm.SamplingParams(
     #     n=num_samples,
     #     temperature=temperature,
     #     use_beam_search=(temperature==0.0 and num_samples>1),
     #     max_tokens=max_tokens,
-    #     stop=stop,
+    #     stop=["\n\n\n", "---", "[/TAC]"],
     # )
 
 class Client:
@@ -44,6 +44,7 @@ class Client:
             )
             from transformers import AutoTokenizer
             self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+            return
 
         elif self.model_source == "vllm-online":
             self.client = openai.OpenAI(
