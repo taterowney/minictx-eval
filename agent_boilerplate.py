@@ -150,7 +150,7 @@ class Client:
                 sampling_params=params,
                 use_tqdm=False,
             )
-            return self.from_vLLM_format(outputs)
+            return self.from_vLLM_format(outputs[0]) # Only one concurrent response
         else:
             assert False
 
@@ -164,6 +164,22 @@ class Client:
         if self.model_source == "azure":
             from azure_batch_inference import batch_inference
             return batch_inference(self.model_name, messages_list, resume_in_progress=True, resume_complete=resume_complete, **self.to_OpenAI_format(kwargs))
+        elif self.model_source == "vllm":
+            from vllm import LLM
+            from vllm import SamplingParams
+            params = SamplingParams(**self.to_vLLM_format(kwargs))
+            outputs = self.client.chat(messages_list, sampling_params=params, use_tqdm=False) #Will be a list of responses now
+            return [self.from_vLLM_format(out) for out in outputs]
+        elif self.model_source == "vllm-online":
+            with ThreadPoolExecutor() as executor:
+                futures = []
+                for messages in messages_list:
+                    kwargs_copy = self.to_OpenAI_format(kwargs)
+                    kwargs_copy["model"] = self.model_name
+                    kwargs_copy["messages"] = messages
+                    futures.append(executor.submit(self.client.chat.completions.create, **kwargs_copy))
+                all_results = [future.result() for future in futures]
+                return all_results
 
     def to_OpenAI_format(self, kwargs):
         """
@@ -181,13 +197,13 @@ class Client:
         from vllm import SamplingParams
         return SamplingParams(**kwargs)
 
-    def from_vLLM_format(self, outputs):
+    def from_vLLM_format(self, out):
         """
         Convert vLLM SamplingParams to OpenAI format.
         """
 
         choices = []
-        for i, response in enumerate(outputs[0].outputs):
+        for i, response in enumerate(out.outputs):
             message = ChatCompletionMessage(role="assistant", content=response.text)
             choice = ChatCompletionChoice(
                 finish_reason="stop",
