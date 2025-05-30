@@ -1,3 +1,6 @@
+# Organization for batch inference API in Microsoft Azure's AI foundry
+# Written by Tate Rowney (CMU L3 lab)
+
 from openai import AzureOpenAI
 from dotenv import load_dotenv
 import os, json, time

@@ -1,3 +1,6 @@
+# Evaluation script for miniCTX dataset
+# Written by Tate Rowney and Jiewen Hu (CMU L3 lab)
+
 import json, os, re, subprocess
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
@@ -62,7 +65,7 @@ def _get_lean_environment_name(dataset_name):
         "seymour": "test-envs/minictx-v2/seymour",
     }
     if dataset_name.lower() not in envs:
-        raise ValueError(f"Can't find a directory with a Lean environment to run for dataset {dataset_name}. Please specify one using the --lean_env_path argument.")
+        raise ValueError(f"{dataset_name} is not a miniCTX-v2 dataset, so can't automatically determine which environment to use. Please specify one using the --lean-env-path argument.")
     dir = os.path.join(os.getcwd(), envs[dataset_name.lower()])
     if not os.path.exists(dir):
         raise ValueError(f"Lean environment directory {dir} is not installed. Clone the {envs[dataset_name.lower()]} repository from GitHub and run `lake exe cache get` and `lake build` to install it.")
@@ -109,7 +112,7 @@ def _truncate_middle(text, max_tokens):
 def _check_lake():
     """ Checks if the lake executable is available in the PATH. """
     if not subprocess.run(["which", "lake"], capture_output=True, text=True, check=True):
-        raise EnvironmentError("Lake executable not found in PATH. Make sure Lean (and its package manager `lake`) are installed. If you are running this in an IDE, try running via the command line instead. ") from e
+        raise EnvironmentError("Lake executable not found in PATH. Make sure Lean (and its package manager `lake`) are installed. If you are running this in an IDE, try running via the command line instead. ")
 
 
 def load_data(dataset_name, path_to_data=MINICTX2_PATH):
@@ -257,28 +260,31 @@ if __name__ == "__main__":
     _check_lake()
     import argparse
     parser = argparse.ArgumentParser()
+    #TODO: argument documentation
     parser.add_argument('--model-name', required=True)
     parser.add_argument(
         '--task',
         default='full_proof_context',
-        choices=['tactic_prediction', 'tactic_prediction_context', 'full_proof', 'full_proof_context', 'tactic_prediction_fewshot']
+        choices=['tactic_prediction', 'tactic_prediction_context', 'full_proof', 'full_proof_context', 'tactic_prediction_fewshot'],
+        help="The task for the model to perform. 'tactic_prediction' is for predicting the next tactic based on the theorem statement, 'full_proof' attempts to generate a full proof, while the '..._context' options provide the full context of the repository to the model as well"
     )
     parser.add_argument(
         '--dataset-name',
-        default='mathlib'
+        default='mathlib',
+        help="The dataset to evaluate the model on. MiniCTX-v2 includes mathlib, carleson, ConNF, FLT, foundation, HepLean, and seymour. You may specify another dataset by using this and the --dataset-path flag"
     )
-    parser.add_argument('--dataset-path', default=MINICTX2_PATH)
+    parser.add_argument('--dataset-path', default=MINICTX2_PATH, help="The path to the dataset directory. Defaults to miniCTX-v2 test set. The path specified should be a directory containing appropriately formatted .jsonl files (see data/minictx2/test/ for examples), while the --dataset-name argument should be the name of one of the jsonl files. ")
     # parser.add_argument('--premise-path', default=None)
-    parser.add_argument('--log-output', type=bool, default=True)
-    parser.add_argument('--output-dir', default=None)
+    parser.add_argument('--log-output', type=bool, default=True, help="Whether to log the output to a file.")
+    parser.add_argument('--output-dir', default=None, help="The directory to save the output to. If not specified, a new directory will be created in the output/{dataset name} folder with the current date and time.")
     # parser.add_argument('--tp-degree', type=int, default=1)
     # parser.add_argument('--max-iters', type=int, default=100)
-    parser.add_argument('--num-samples', type=int, default=8)
+    parser.add_argument('--num-samples', type=int, default=8, help="The number of samples to generate for each theorem (best of N).")
     # parser.add_argument('--temperatures', type=float, default=0.0)
-    parser.add_argument('--repl-path', default=os.path.join(os.getcwd(), "repl"))
-    parser.add_argument('--lean-env-path', default=None)
-    parser.add_argument('--use-batch-inference', type=bool, default=False)
-    parser.add_argument("--vllm-mode", default="offline", choices=["offline", "online"])
+    parser.add_argument('--repl-path', default=os.path.join(os.getcwd(), "repl"), help="The path to the REPL submodule, used to evaluate the model's proofs.")
+    parser.add_argument('--lean-env-path', default=None, help="The path to the Lean environment to use for evaluating proofs. If not specified, it will be automatically determined based on the dataset name.")
+    parser.add_argument('--use-batch-inference', type=bool, default=False, help="Whether to use batch inference for the model. May not be supported by all models. For API models, this generally takes a very long time, but is more cost-effective.")
+    parser.add_argument("--vllm-mode", default="offline", choices=["offline", "online"], help="When using vLLM, whether to use online or offline inference. Online inference requires a vLLM server to be running (vllm serve --port 8000 --model <model_name>). Offline inference does not support reasoning models.")
 
     args = parser.parse_args()
 

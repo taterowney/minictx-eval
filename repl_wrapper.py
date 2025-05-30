@@ -1,3 +1,6 @@
+# Wrapper for the Lean REPL for proof verification and evaluation of Lean code
+# Written by Jiewen Hu and Tate Rowney (CMU L3 lab)
+
 import threading
 import pexpect
 import json
@@ -137,10 +140,6 @@ def evaluate_repl(*args, repl_path=os.path.join(os.getcwd(), "repl"), lean_env_p
             else:
                 json.dump({"cmd": cmd, "env": 0}, temp, ensure_ascii=False) #TODO: update environment number for >2 calls?
             temp.write("\n\n")
-        # json.dump({"cmd": remove_last_comment(imports)}, temp, ensure_ascii=False)
-        # temp.write("\n\n")
-        # json.dump({"cmd": response, "env": 0}, temp, ensure_ascii=False)
-        # temp.write("\n\n")
         temp.flush()
         temp_name = temp.name
 

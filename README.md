@@ -4,7 +4,7 @@ This repository contains the evaluation scripts for [miniCTX: Neural Theorem Pro
 
 ## Requirements
 
-- Python 3
+- Python 3 (tested with 3.12.5)
 - PyTorch
 - Required Python packages (specified in `requirements.txt`)
 
@@ -13,7 +13,7 @@ This repository contains the evaluation scripts for [miniCTX: Neural Theorem Pro
   ```
 
 - Lean 4
-- [Mathlib 4](https://github.com/leanprover-community/mathlib4), [HTPI](https://github.com/your-htpi-repo-link), [PrimeNumberTheoremAnd](https://github.com/your-prime-number-theorem-and-repo-link), [PFR](https://github.com/your-pfr-repo-link), or any other Lean project to test
+- [Mathlib 4](https://github.com/leanprover-community/mathlib4), [PrimeNumberTheoremAnd](https://github.com/AlexKontorovich/PrimeNumberTheoremAnd), [PFR](https://github.com/teorth/pfr), or any other Lean project to test
 - [Lean REPL](https://github.com/leanprover-community/repl)
 
 ## Setup Environment
@@ -22,17 +22,18 @@ This repository contains the evaluation scripts for [miniCTX: Neural Theorem Pro
 
    Follow the instructions on the [Lean 4 installation page](https://leanprover.github.io/lean4/doc/quickstart.html) to set up Lean 4.
 
-2. **Set up and build your target Lean project**
+2. **Set up and build your target Lean project(s)**
 
-   To setup the projects in this repository:
+   MiniCTX uses examples from actual projects, so responses must be evaluated in the environment of these projects. To install these, run:
    ```bash
    git submodule init
    git submodule update
    ```
+   > *Note: by default, this installs all the repositories necessary for miniCTX-v2, the most recent version of the dataset. If you want to run miniCTX-v1 as presented in the paper above, run `bash scripts/install_v1_environments.sh`*
 
-   Then build the project; for instance, for Mathlib:
+   Then build the project(s); for instance, for Mathlib:
    ```bash
-   cd mathlib4
+   cd test-envs/minictx-v2/mathlib4
    lake exe cache get
    lake build
    ```
@@ -46,36 +47,37 @@ This repository contains the evaluation scripts for [miniCTX: Neural Theorem Pro
    lake build
    ```
 
-## Running the Evaluation
+## Evaluation
 
 ### Edit the Script
 
-Open `script.sh` and verify that the paths and parameters are correctly set according to your setup. The script contains the following variables:
+Open `scripts/evaluation.sh` and verify that the parameters are correctly set according to your setup. The script contains the following variables:
 
-- `TASK`: The task name, selected from `tactic_prediction`, `tactic_prediction_context`, `full_proof`, `full_proof_context`.
-- `MAX_ITERS`: The maximum number of iterations (default: `100`).
-- `NUM_SAMPLES`: The number of samples (default: `32`).
-- `TEMPERATURES`: The temperatures for sampling (default: `0.0`).
-- `DATASET`: The name of the dataset (default: `mathlib`).
-- `DATA`: The path to the dataset file (default: `data/mathlib.jsonl`).
-- `MODEL`: The model name (default: `l3lab/ntp-mathlib-context-deepseek-coder-1.3b`).
-- `NAME`: The name for the output directory (default: `deepseekCT`).
-- `OUTPUT_DIR`: The directory where the output will be saved.
-- `REPL_PATH`: The path to the REPL project.
-- `LEAN_PATH`: The path to the Lean project environment (e.g., Mathlib 4).
+- `TASK`: The model's task, selected from `tactic_prediction`, `tactic_prediction_context`, `full_proof`, `full_proof_context`.
+- `NUM_SAMPLES`: The number of proofs the model should try to generate (default: `32`).
+- `DATASET`: The name of the dataset (default: `mathlib`). MiniCTX-v2 supports `mathlib`, `carleson`, `ConNF`, `FLT`, `foundation`, `HepLean` (the former name of PhysLean), and `Seymour`. Use this and the `--dataset-path` flag to manually specify miniCTX-v1 or other datasets.
+- `MODEL`: The model name. Can be a locally-run model available on HuggingFace (e.g. `l3lab/ntp-mathlib-context-deepseek-coder-1.3b`), or an API-based model (e.g. `o4-mini`). Local models are evaluated using [vLLM](https://github.com/vllm-project/vllm) (use the `--vllm-mode offline/online` flag to run offline or online inference), while API models from OpenAI, Anthropic, or Google are supported. 
+
+Customization options for different paths, new datasets/projects, or different inference modes are available. To see all documentation, run `python check.py --help`. 
 
 ### Run the Script
 
 Make the script executable and run it:
 
 ```bash
-chmod +x script.sh
-./script.sh
+chmod +x scripts/evaluation.sh
+./scripts/evaluation.sh
+```
+
+Or run it directly with Python:
+
+```bash
+python check.py --task "full_proof_context" --dataset "mathlib" --model "o4-mini" --num-samples 32
 ```
 
 ### Output
 
-The output will be saved in the `output/${NAME}_mathlib` directory, and the log will be saved in `mathlib_context.out`.
+The output will be saved in a directory named `output/{name of the dataset}/{time}:{model}@{n}`.
 
 ## `repl_wrapper.py`
 

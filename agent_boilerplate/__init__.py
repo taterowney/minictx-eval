@@ -1,10 +1,13 @@
+# Unified interface for local and API models from various providers
+# Written by Tate Rowney (CMU L3 Lab)
+
 import os, re
 import openai
 from concurrent.futures import ThreadPoolExecutor
 from pydantic import BaseModel, Field
 
 
-# OpenAI doesn't want to use 'em, Azure can't live without 'em :(
+# OpenAI doesn't want you to use 'em, Azure can't live without 'em :(
 class ChatCompletionMessage(BaseModel):
     role: str = Field(..., description="Role of the message sender, e.g., 'user', 'assistant', 'system'.")
     content: str = Field(..., description="Content of the message.")
@@ -33,15 +36,6 @@ def get_model_vendor(model_name, is_api=False):
         if is_api:
             raise ValueError(f"Unsupported API model name: {model_name}")
         return "vllm"
-
-
-    # params = vllm.SamplingParams(
-    #     n=num_samples,
-    #     temperature=temperature,
-    #     use_beam_search=(temperature==0.0 and num_samples>1),
-    #     max_tokens=max_tokens,
-    #     stop=["\n\n\n", "---", "[/TAC]"],
-    # )
 
 class Client:
     def __init__(self, model_name, model_source=None, endpoint="http://localhost:8000/v1", **kwargs):
@@ -139,7 +133,13 @@ class Client:
                 return res
             except openai.BadRequestError as e:
                 if "'code': 'unknown_model'" in e.message:
-                    raise ValueError(f"\"{self.model_name}\" does not appear to be a valid OpenAI model. Visit https://platform.openai.com/docs/models for a list of available models, or specify the model source manually. If you're using Azure, make sure you have setup a deployment for the model in your Azure OpenAI resource, and that you are using the deployment name as the model name.")
+                    provider_dict = {
+                        "openai": ("OpenAI", "https://platform.openai.com/docs/models"),
+                        "azure": ("Azure OpenAI", "the Azure AI foundry"),
+                        "google": ("Google Gemini", "https://ai.dev"),
+                        "anthropic": ("Anthropic", "https://docs.anthropic.com/en/docs/about-claude/models/overview"),
+                    }
+                    raise ValueError(f"\"{self.model_name}\" does not appear to be a valid {provider_dict[self.model_source][0]} model. Visit {provider_dict[self.model_source][1]} for a list of available models, or specify the model source manually. {'Make sure you have set up a deployment for the model in your Azure OpenAI resource, and that you are using the deployment name as the model name.' if self.model_source == 'azure' else ''}")
                 else:
                     raise e
         elif self.model_source == "vllm":
@@ -161,7 +161,7 @@ class Client:
 
     def infer_batch(self, messages_list, batch_name="default", **kwargs):
         if self.model_source == "azure":
-            from azure_batch_inference import batch_inference
+            from agent_boilerplate.azure_batch_inference import batch_inference
             return batch_inference(self.model_name, messages_list, job_tags={"name": batch_name, "n": kwargs.get("n", 1)}, **self.to_OpenAI_format(kwargs))
         elif self.model_source == "vllm":
             from vllm import LLM
@@ -212,14 +212,4 @@ class Client:
             choices.append(choice)
 
         return ChatCompletionResponse(choices=choices)
-
-
-if __name__ == "__main__":
-    client = Client("deepseek-ai/DeepSeek-R1-Distill-Qwen-7B")
-    messages = [
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "What is the capital of France?"}
-    ]
-    print(client.get_response(messages, temperature=0.7, max_tokens=50, n=1))
-    # print(client.get_response(messages))
 
