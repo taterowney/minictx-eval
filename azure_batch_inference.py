@@ -2,6 +2,7 @@ from openai import AzureOpenAI
 from dotenv import load_dotenv
 import os, json, time
 from datetime import datetime
+from pydantic import BaseModel, Field
 
 
 
@@ -144,13 +145,46 @@ def download_results(folder_path):
 
     output_file_id = job_info["output_file_id"]
     output = client.files.content(output_file_id).text.strip()
-    formatted_output = [json.loads(line) for line in output.split("\n") if line.strip()]
+    # formatted_output = [json.loads(line) for line in output.split("\n") if line.strip()]
+    formatted_output = {}
+    for line in output.split("\n"):
+        if line.strip():
+            res = json.loads(line)
+            query_number = int(res["custom_id"].split("-")[-2])
+            if query_number not in formatted_output:
+                formatted_output[query_number] = ChatCompletionResponse(choices=[])
+            formatted_output[query_number].choices.append(
+                ChatCompletionChoice(
+                    finish_reason=res["response"]["body"]["choices"][0]["finish_reason"],
+                    index=len(formatted_output[query_number].choices),
+                    message=ChatCompletionMessage(
+                        role="assistant",
+                        content=res["response"]["body"]["choices"][0]["message"]["content"],
+                    )
+                )
+            )
+    formatted_output = [formatted_output[i] for i in sorted(formatted_output.keys())]
 
     output_path = os.path.join(folder_path, "output.jsonl")
     with open(output_path, 'wb') as f:
         f.write(output.encode('utf-8'))
 
     return formatted_output
+
+class ChatCompletionMessage(BaseModel):
+    role: str = Field(..., description="Role of the message sender, e.g., 'user', 'assistant', 'system'.")
+    content: str = Field(..., description="Content of the message.")
+    name: str | None = Field(None, description="Optional name of the message sender.")
+    function_call: dict | None = Field(None, description="Optional function call information if applicable.")
+
+class ChatCompletionChoice(BaseModel):
+    finish_reason: str
+    index: int
+    message: ChatCompletionMessage
+
+class ChatCompletionResponse(BaseModel):
+    choices: list[ChatCompletionChoice]
+
 
 def batch_inference(model, messages, resume_in_progress=True, resume_complete=False, **kwargs):
     """ Performs batch inference using Azure OpenAI. Call again to resume in-progress jobs after termination, or to re-download completed jobs. """

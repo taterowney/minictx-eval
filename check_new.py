@@ -53,7 +53,7 @@ def _extract_proof(response, theorem_statement):
 def _get_lean_environment_name(dataset_name):
     """ Returns the directory of the Lean project for the specified dataset. """
     envs = {
-        "mathlib": "mathlib4",
+        "mathlib": "test-envs/minictx-v2/mathlib4",
     }
     if dataset_name.lower() not in envs:
         raise ValueError(f"Can't find a directory with a Lean environment to run for dataset {dataset_name}. Please specify one using the --lean_env_path argument.")
@@ -81,8 +81,8 @@ def _get_full_name(statement):
     return None
 
 
-def _get_output_file(dataset_name):
-    output_dir = os.path.join(os.getcwd(), "output", dataset_name, datetime.now().strftime("%d-%m-%Y-%H-%M"))
+def _get_output_file(dataset_name, model, num_samples):
+    output_dir = os.path.join(os.getcwd(), "output", dataset_name, datetime.now().strftime("%d-%m-%Y-%H-%M")+f":{model}@{num_samples}")
     os.makedirs(output_dir, exist_ok=True)
     output_file = os.path.join(output_dir, f"results.jsonl")
     return output_file
@@ -117,7 +117,7 @@ def load_data(dataset_name, path_to_data=MINICTX2_PATH):
 
 
 # def evaluation_loop(dataset_name, model_name, task, dataset_path, prompt_fn=_prompt_fewshot, repl_path=os.path.join(os.getcwd(), "repl"), lean_env_path=None, log_output=True, output_dir=None):
-def evaluation_loop(model_name, task="full_proof_context", dataset_name="mathlib", dataset_path=MINICTX2_PATH, log_output=True, output_dir=None, num_samples=32, repl_path=os.path.join(os.getcwd(), "repl"), lean_env_path=None, use_batch_inference=False):
+def evaluation_loop(model_name, task="full_proof_context", dataset_name="mathlib", dataset_path=MINICTX2_PATH, log_output=True, output_dir=None, num_samples=32, repl_path=os.path.join(os.getcwd(), "repl"), lean_env_path=None, use_batch_inference=False, recheck_completed_job=False):
     """ Loads a dataset, evaluates the model on each task in it, and evaluates responses. """
 
     # Initialize a client (this will handle local vs API models)
@@ -150,7 +150,7 @@ def evaluation_loop(model_name, task="full_proof_context", dataset_name="mathlib
             futures = []
             for example in data:
         # for example in tqdm.tqdm(data, desc=f"Evaluating {dataset_name} with {model_name}"):
-                theorem_statement = example["theoremStatement"] + " := "
+                theorem_statement = example["theoremStatement"].strip() + " := "
                 context = example.get("srcContext", "")
                 prompt = prompt_fn(theorem_statement, context, task=task)
                 prompt = _truncate_middle(prompt, context_window)
@@ -189,14 +189,19 @@ def evaluation_loop(model_name, task="full_proof_context", dataset_name="mathlib
                 {"role": "user", "content": prompt}
             ])
 
-        responses = client.infer_batch(messages_list, n=num_samples)
+        responses = client.infer_batch(messages_list, resume_complete=recheck_completed_job, n=num_samples)
 
-    for i, response in enumerate(responses):
+    # Ik it could probably be done faster by running it while inference happens, but I wanted to keep it consistent for batch inference too
+    for example, response in zip(data, tqdm.tqdm(responses, desc=f"Checking proofs for {dataset_name} with {model_name}")):
+        theorem_statement = example["theoremStatement"].strip() + " := "
+        context = example.get("srcContext", "")
+        # print(theorem_statement)
+
         proofs = _unique(_extract_proof(res.message.content, theorem_statement) for res in response.choices)
+        # print(proofs)
 
-        # ...and see if any of them work
-        with ThreadPoolExecutor() as executor2:
-            futures = [executor2.submit(evaluate_repl, context, theorem_statement + p, repl_path=repl_path, lean_env_path=lean_env_path) for p in proofs]
+        with ThreadPoolExecutor() as executor:
+            futures = [executor.submit(evaluate_repl, context, theorem_statement + p, repl_path=repl_path, lean_env_path=lean_env_path) for p in proofs]
             results = [future.result() for future in futures]
 
         has_proven = False
@@ -222,7 +227,7 @@ Score: {successes} correct out of {len(data)} ({successes/len(data)*100:.2f}%)
     # Save results to a file
     if log_output:
         if output_dir is None:
-            output_file = _get_output_file(dataset_name)
+            output_file = _get_output_file(dataset_name, model_name, num_samples)
         else:
             output_file = os.path.join(output_dir, f"results.jsonl")
         with open(output_file, "w") as f:
@@ -255,6 +260,7 @@ if __name__ == "__main__":
     parser.add_argument('--repl-path', default=os.path.join(os.getcwd(), "repl"))
     parser.add_argument('--lean-env-path', default=None)
     parser.add_argument('--use-batch-inference', type=bool, default=False)
+    parser.add_argument("--recheck-completed-job", type=bool, default=False)
 
     args = parser.parse_args()
 
@@ -268,7 +274,8 @@ if __name__ == "__main__":
         num_samples=args.num_samples,
         repl_path=args.repl_path,
         lean_env_path=args.lean_env_path,
-        use_batch_inference=args.use_batch_inference
+        use_batch_inference=args.use_batch_inference,
+        recheck_completed_job=args.recheck_completed_job
     )
 
     # python3 check_new.py --model-name "gemini-2.5-flash-preview-05-20" --dataset-name "mathlib"

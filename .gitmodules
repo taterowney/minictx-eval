@@ -25,3 +25,6 @@
 [submodule "SciLean"]
 	path = test-envs/SciLean
 	url = https://github.com/lecopivo/SciLean.git
+[submodule "test-envs/minictx-v2/mathlib4"]
+	path = test-envs/minictx-v2/mathlib4
+	url = https://github.com/leanprover-community/mathlib4.git
