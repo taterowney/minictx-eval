@@ -54,6 +54,12 @@ def _get_lean_environment_name(dataset_name):
     """ Returns the directory of the Lean project for the specified dataset. """
     envs = {
         "mathlib": "test-envs/minictx-v2/mathlib4",
+        "carleson": "test-envs/minictx-v2/carleson",
+        "connf": "test-envs/minictx-v2/con-nf",
+        "flt": "test-envs/minictx-v2/FLT",
+        "foundation": "test-envs/minictx-v2/Foundation",
+        "heplean": "test-envs/minictx-v2/Physlean", # note the name change
+        "seymour": "test-envs/minictx-v2/seymour",
     }
     if dataset_name.lower() not in envs:
         raise ValueError(f"Can't find a directory with a Lean environment to run for dataset {dataset_name}. Please specify one using the --lean_env_path argument.")
