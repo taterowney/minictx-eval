@@ -108,13 +108,8 @@ def _truncate_middle(text, max_tokens):
 
 def _check_lake():
     """ Checks if the lake executable is available in the PATH. """
-    try:
-        result = subprocess.run(["lake", "--version"], capture_output=True, text=True, check=True)
-        return True
-    except subprocess.CalledProcessError:
-        return False
-    except FileNotFoundError:
-        return False
+    if not subprocess.run(["which", "lake"], capture_output=True, text=True, check=True):
+        raise EnvironmentError("Lake executable not found in PATH. Make sure Lean (and its package manager `lake`) are installed. If you are running this in an IDE, try running via the command line instead. ") from e
 
 
 def load_data(dataset_name, path_to_data=MINICTX2_PATH):
@@ -136,6 +131,8 @@ def load_data(dataset_name, path_to_data=MINICTX2_PATH):
 # def evaluation_loop(dataset_name, model_name, task, dataset_path, prompt_fn=_prompt_fewshot, repl_path=os.path.join(os.getcwd(), "repl"), lean_env_path=None, log_output=True, output_dir=None):
 def evaluation_loop(model_name, task="full_proof_context", dataset_name="mathlib", dataset_path=MINICTX2_PATH, log_output=True, output_dir=None, num_samples=32, repl_path=os.path.join(os.getcwd(), "repl"), lean_env_path=None, use_batch_inference=False, vllm_mode="offline"):
     """ Loads a dataset, evaluates the model on each task in it, and evaluates responses. """
+
+    _check_lake()
 
     # Initialize a client (this will handle local vs API models)
     source = get_model_vendor(model_name)
@@ -257,6 +254,7 @@ Score: {successes} correct out of {len(data)} ({successes/len(data)*100:.2f}%)
 
 
 if __name__ == "__main__":
+    _check_lake()
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--model-name', required=True)
