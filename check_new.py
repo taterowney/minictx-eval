@@ -221,10 +221,11 @@ def evaluation_loop(model_name, task="full_proof_context", dataset_name="mathlib
                 proof_data = {"success": True, "proof": proof}
                 break
         if not has_proven:
-            proof_data = {"success": False, "proof": proofs[0]} # Figured it would be useful to see where it's going wrong
+            proof_data = {"success": False, "proof": None}
 
         example["full_name"] = _get_full_name(theorem_statement)
         example["proof"] = proof_data
+        example["candidates"] = proofs
 
     print(f"""{'-'*20} SUMMARY {'-'*20}
 Dataset: {dataset_name}
