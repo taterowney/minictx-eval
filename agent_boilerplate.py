@@ -160,10 +160,10 @@ class Client:
         res = self.get_raw_response(messages, **kwargs)
         return res.choices[0].message.content
 
-    def infer_batch(self, messages_list, resume_complete=False, **kwargs):
+    def infer_batch(self, messages_list, batch_name="default", **kwargs):
         if self.model_source == "azure":
             from azure_batch_inference import batch_inference
-            return batch_inference(self.model_name, messages_list, resume_in_progress=True, resume_complete=resume_complete, **self.to_OpenAI_format(kwargs))
+            return batch_inference(self.model_name, messages_list, job_tags={"name": batch_name, "n": kwargs.get("n", 1)}, **self.to_OpenAI_format(kwargs))
         elif self.model_source == "vllm":
             from vllm import LLM
             from vllm import SamplingParams

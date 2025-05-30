@@ -123,7 +123,7 @@ def load_data(dataset_name, path_to_data=MINICTX2_PATH):
 
 
 # def evaluation_loop(dataset_name, model_name, task, dataset_path, prompt_fn=_prompt_fewshot, repl_path=os.path.join(os.getcwd(), "repl"), lean_env_path=None, log_output=True, output_dir=None):
-def evaluation_loop(model_name, task="full_proof_context", dataset_name="mathlib", dataset_path=MINICTX2_PATH, log_output=True, output_dir=None, num_samples=32, repl_path=os.path.join(os.getcwd(), "repl"), lean_env_path=None, use_batch_inference=False, recheck_completed_job=False, vllm_mode="offline"):
+def evaluation_loop(model_name, task="full_proof_context", dataset_name="mathlib", dataset_path=MINICTX2_PATH, log_output=True, output_dir=None, num_samples=32, repl_path=os.path.join(os.getcwd(), "repl"), lean_env_path=None, use_batch_inference=False, vllm_mode="offline"):
     """ Loads a dataset, evaluates the model on each task in it, and evaluates responses. """
 
     # Initialize a client (this will handle local vs API models)
@@ -197,7 +197,7 @@ def evaluation_loop(model_name, task="full_proof_context", dataset_name="mathlib
                 {"role": "user", "content": prompt}
             ])
 
-        responses = client.infer_batch(messages_list, resume_complete=recheck_completed_job, n=num_samples)
+        responses = client.infer_batch(messages_list, batch_name=dataset_name, n=num_samples)
 
     # Ik it could probably be done faster by running it while inference happens, but I wanted to keep it consistent for batch inference too
     for example, response in zip(data, tqdm.tqdm(responses, desc=f"Checking proofs for {dataset_name} with {model_name}")):
@@ -268,7 +268,6 @@ if __name__ == "__main__":
     parser.add_argument('--repl-path', default=os.path.join(os.getcwd(), "repl"))
     parser.add_argument('--lean-env-path', default=None)
     parser.add_argument('--use-batch-inference', type=bool, default=False)
-    parser.add_argument("--recheck-completed-job", type=bool, default=False)
     parser.add_argument("--vllm-mode", default="offline", choices=["offline", "online"])
 
     args = parser.parse_args()
@@ -284,7 +283,6 @@ if __name__ == "__main__":
         repl_path=args.repl_path,
         lean_env_path=args.lean_env_path,
         use_batch_inference=args.use_batch_inference,
-        recheck_completed_job=args.recheck_completed_job,
         vllm_mode=args.vllm_mode
     )
 

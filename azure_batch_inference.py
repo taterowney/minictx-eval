@@ -17,7 +17,7 @@ client = AzureOpenAI(
     azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
 )
 
-def upload_data(model, messages_list, **kwargs):
+def upload_data(model, messages_list, job_tags={}, **kwargs):
     """
     Creates an appropriately formatted jsonl file for batch inference at a new folder in batch-inference/jobs/(time)/
     Uploads it to Azure OpenAI for batch inference.
@@ -60,6 +60,7 @@ def upload_data(model, messages_list, **kwargs):
             "batch_id": "",
             "messages": "",
             "output_file_id": "",
+            "job_tags": job_tags,
         }, f, indent=4)
 
     return folder_path
@@ -186,8 +187,12 @@ class ChatCompletionResponse(BaseModel):
     choices: list[ChatCompletionChoice]
 
 
-def batch_inference(model, messages, resume_in_progress=True, resume_complete=False, **kwargs):
+def batch_inference(model, messages, job_tags={}, **kwargs):
     """ Performs batch inference using Azure OpenAI. Call again to resume in-progress jobs after termination, or to re-download completed jobs. """
+
+    protected_tags = ["model", "file_id", "batch_id", "output_file_id", "status", "messages"]
+    for tag in protected_tags:
+        job_tags.pop(tag, None)
 
     if not os.path.exists(os.path.join(os.getcwd(), "batch-inference/jobs")) or not os.listdir(os.path.join(os.getcwd(), "batch-inference/jobs")):
         folder_path = upload_data(model, messages, **kwargs)
@@ -196,7 +201,7 @@ def batch_inference(model, messages, resume_in_progress=True, resume_complete=Fa
         folder_path = None
         for job in jobs:
             status = get_status(os.path.join(os.getcwd(), "batch-inference/jobs", job))
-            if (resume_in_progress and status["status"] != "complete") or (resume_complete and status["status"] == "completed"):
+            if (status["job_tags"] == job_tags or (not job_tags)) and (status["model"] == model):
                 folder_path = os.path.join(os.getcwd(), "batch-inference/jobs", job)
                 break
         if not folder_path:
