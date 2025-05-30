@@ -1,6 +1,5 @@
 import os, re
 import openai
-from openai.types import chat
 from concurrent.futures import ThreadPoolExecutor
 from pydantic import BaseModel, Field
 

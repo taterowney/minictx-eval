@@ -1,4 +1,4 @@
-import json, os, re
+import json, os, re, subprocess
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 import tqdm
@@ -104,6 +104,17 @@ def _truncate_middle(text, max_tokens):
         return text
     half = max_tokens * 2 - 1
     return ' '.join(tokens[:half] + ["..."] + tokens[-half:])
+
+
+def _check_lake():
+    """ Checks if the lake executable is available in the PATH. """
+    try:
+        result = subprocess.run(["lake", "--version"], capture_output=True, text=True, check=True)
+        return True
+    except subprocess.CalledProcessError:
+        return False
+    except FileNotFoundError:
+        return False
 
 
 def load_data(dataset_name, path_to_data=MINICTX2_PATH):

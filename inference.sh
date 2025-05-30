@@ -12,7 +12,9 @@
 
 MODEL_NAME="deepseek-ai/DeepSeek-Prover-V2-7B"
 
-vllm serve $MODEL_NAME --port 8000 --max_model_len 50000 --enable-reasoning --reasoning-parser deepseek_r1 > logs/vllm.out 2>&1 &
+#vllm serve $MODEL_NAME --port 8000 --max_model_len 50000 --enable-reasoning --reasoning-parser deepseek_r1 > logs/vllm.out 2>&1 &
+vllm serve $MODEL_NAME --port 8000  > logs/vllm.out 2>&1 &
+
 
 echo "Waiting for vLLM server to start..."
 until curl -s http://localhost:8000/ping > /dev/null; do
