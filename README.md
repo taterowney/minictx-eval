@@ -16,7 +16,7 @@ This repository contains the evaluation scripts for [miniCTX: Neural Theorem Pro
 - [Mathlib 4](https://github.com/leanprover-community/mathlib4), [PrimeNumberTheoremAnd](https://github.com/AlexKontorovich/PrimeNumberTheoremAnd), [PFR](https://github.com/teorth/pfr), or any other Lean project to test
 - [Lean REPL](https://github.com/leanprover-community/repl)
 
-## Setup Environment
+## Environment Setup
 
 1. **Install Lean 4**
 
@@ -56,7 +56,7 @@ Open `scripts/evaluation.sh` and verify that the parameters are correctly set ac
 - `TASK`: The model's task, selected from `tactic_prediction`, `tactic_prediction_context`, `full_proof`, `full_proof_context`.
 - `NUM_SAMPLES`: The number of proofs the model should try to generate (default: `32`).
 - `DATASET`: The name of the dataset (default: `mathlib`). MiniCTX-v2 supports `mathlib`, `carleson`, `ConNF`, `FLT`, `foundation`, `HepLean` (the former name of PhysLean), and `Seymour`. Use this and the `--dataset-path` flag to manually specify miniCTX-v1 or other datasets.
-- `MODEL`: The model name. Can be a locally-run model available on HuggingFace (e.g. `l3lab/ntp-mathlib-context-deepseek-coder-1.3b`), or an API-based model (e.g. `o4-mini`). Local models are evaluated using [vLLM](https://github.com/vllm-project/vllm) (use the `--vllm-mode offline/online` flag to run offline or online inference), while API models from OpenAI, Anthropic, or Google are supported. 
+- `MODEL`: The model name. Can be a locally-run model available on HuggingFace (e.g. `l3lab/ntp-mathlib-context-deepseek-coder-1.3b`), or an API-based model (e.g. `o4-mini`). Local models are evaluated using [vLLM](https://github.com/vllm-project/vllm) (use the `--vllm-mode offline`/`online` flag to run offline or online inference), while API models from OpenAI, Anthropic, or Google are supported. 
 
 Customization options for different paths, new datasets/projects, or different inference modes are available. To see all documentation, run `python check.py --help`. 
 
