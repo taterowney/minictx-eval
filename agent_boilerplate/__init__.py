@@ -176,6 +176,7 @@ class Client:
                     kwargs_copy = self.to_OpenAI_format(kwargs)
                     kwargs_copy["model"] = self.model_name
                     kwargs_copy["messages"] = messages
+                    kwargs_copy["timeout"] = None
                     futures.append(executor.submit(self.client.chat.completions.create, **kwargs_copy))
                 all_results = [future.result() for future in futures]
                 return all_results
