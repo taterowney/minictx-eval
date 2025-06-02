@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 import tqdm
 
 from agent_boilerplate import Client, get_model_vendor
-from repl_wrapper import evaluate_repl
+from repl_wrapper import evaluate_repl, InteractiveThread
 
 
 MINICTX_PATH = os.path.join(os.getcwd(), "data/minictx/")
@@ -16,22 +16,25 @@ MINICTX2_PATH = os.path.join(os.getcwd(), "data/minictx2/test/")
 
 def _prompt_fewshot(theorem_statement, src_context, task="full_proof_context", premises=None):
     """ Generates a prompt with a few examples for the theorem proving task. """
-    if premises != None:
+    if premises is not None and task.endswith("context"):
         with open(f"prompt/{task}_premise.txt", "r") as infile:
             prompt = infile.read()
+        premises_str = "\n".join(premises)
+        prompt = prompt.format(src_context, premises_str, theorem_statement)
+
     else:
         with open(f"prompt/{task}.txt", "r") as infile:
             prompt = infile.read()
+        prompt = prompt.format(src_context, theorem_statement)
 
-    if task == "full_proof_context":
-        if premises != None:
-            premises_str = "\n".join(premises)
-            prompt = prompt.format(src_context, premises_str, theorem_statement)
-        else:
-            prompt = prompt.format(src_context, theorem_statement)
-        # TODO: truncation based on receiving model
-        # prompt = truncate_middle(prompt, tokenizer, max_tokens=2000000)
-        return prompt
+    return prompt
+
+
+def _get_proof_delimiters(task):
+    """ Returns the delimiters used by this task to contain the output proof. """
+    if task.startswith("full_proof"):
+        return "```lean", "```"
+    return "[TAC]", "[/TAC]"
 
 
 def _load_system_prompt():
@@ -40,10 +43,12 @@ def _load_system_prompt():
         return infile.read()
 
 
-def _extract_proof(response, theorem_statement):
-    """ Extracts the contents of the first "```lean ... ```" block in the proof.
+def _extract_proof(response, theorem_statement, task):
+    """ Extracts the contents of the first block in the proof in the relevant format.
      ENSURES: does NOT contain theorem statement """
-    pattern = re.compile(r'```lean(.*?)```', re.DOTALL | re.IGNORECASE)
+    delimiters = _get_proof_delimiters(task)
+    # pattern = re.compile(r'```lean(.*?)```', re.DOTALL | re.IGNORECASE)
+    pattern = re.compile(rf'{re.escape(delimiters[0])}(.*?){re.escape(delimiters[1])}', re.DOTALL | re.IGNORECASE)
     match = re.search(pattern, response)
     if match:
         proof = match.group(1).strip()
@@ -68,8 +73,9 @@ def _get_lean_environment_name(dataset_name):
         raise ValueError(f"{dataset_name} is not a miniCTX-v2 dataset, so can't automatically determine which environment to use. Please specify one using the --lean-env-path argument.")
     dir = os.path.join(os.getcwd(), envs[dataset_name.lower()])
     if not os.path.exists(dir):
-        raise ValueError(f"Lean environment directory {dir} is not installed. Clone the {envs[dataset_name.lower()]} repository from GitHub and run `lake exe cache get` and `lake build` to install it.")
+        raise ValueError(f"Lean environment directory {dir} is not installed. Run `git submodule init` and `git submodule update`, the go to {dir} and run `lake exe cache get` and `lake build` to install it.")
     return dir
+
 
 def _unique(texts):
     """ Returns unique texts from the list, preserving order. Removes empty strings. """
@@ -91,6 +97,7 @@ def _get_full_name(statement):
 
 
 def _get_output_file(dataset_name, model, num_samples):
+    """ Returns a path for the output file to contain the results of the evaluation. """
     output_dir = os.path.join(os.getcwd(), "output", dataset_name, datetime.now().strftime("%d-%m-%Y-%H-%M")+f":{model}@{num_samples}")
     os.makedirs(output_dir, exist_ok=True)
     output_file = os.path.join(output_dir, f"results.jsonl")
@@ -130,8 +137,123 @@ def load_data(dataset_name, path_to_data=MINICTX2_PATH):
 
     return data
 
+def _eval_tactic(next_tactic, thread, proof_state, example):
+    if 'admit' in next_tactic or 'sorry' in next_tactic:
+        return {"status": "invalid"}
+    # output = thread.submit_and_receive({"tactic": next_tactic, "proofState": proof_state})
+    output = evaluate_repl({"cmd": next_tactic, "env": proof_state}, repl_path=thread.repl_path, lean_env_path=thread.lean_env_path)
+    if not _error_message(output):
+        if output == "" and "sorry" not in output:
+            return {"status": "invalid"}
+        elif example["full_name"] != None and example["full_name"] in next_tactic:
+        # forbid recursion
+            return {"status": "invalid"}
+        elif output["goals"] == [] and len(output) == 2:
+            return {"status": "done", "output": output}
+        elif output["proofState"] > proof_state:
+            return {"status": "valid", "output": output}
+        else:
+            return {"status": "invalid"}
+    return {"status": "invalid"}
 
-# def evaluation_loop(dataset_name, model_name, task, dataset_path, prompt_fn=_prompt_fewshot, repl_path=os.path.join(os.getcwd(), "repl"), lean_env_path=None, log_output=True, output_dir=None):
+def _error_message(output):
+    if output == None: return True
+    if "messages" in output:
+        for d in output["messages"]:
+            return True
+    if "message" in output:
+        if "error" in output["message"]:
+            return True
+    return False
+
+def verify_fn(candidates, threads):
+    with ThreadPoolExecutor() as executor:
+        futures = [executor.submit(_eval_tactic, candidate, threads[i], example["proofState"], example) for i, (candidate, example) in enumerate(zip(candidates, threads))]
+        results = [future.result() for future in futures]
+    return results
+
+#TODO: integrate with threading and stuff
+def sampling_search(example, k, eval_fn, max_iters, repl_path, lean_env_path):
+    """ Performs a tactic-by-tactic sampling search for the proof of a theorem statement. """
+    proofs = ["" for _ in range(k)]  # Initialize k empty proofs
+    threads = [InteractiveThread(i, repl_path, lean_env_path, initial_context=example.get("srcContext", "")) for i in range(k)]
+    theorem_statement = example["theoremStatement"].strip() + " := "
+    for t in threads:
+        t.start()
+        # out = t.submit_and_receive({"cmd": theorem_statement + " sorry", "env": 0})
+
+    for _ in range(max_iters):
+        candidates = eval_fn(proofs)
+        candidates = [proofs[i] + candidate for i, candidate in enumerate(candidates)]
+
+        for i, (candidate, res) in enumerate(zip(candidates, verify_fn(candidates, threads))):
+            if res["status"] == "done":
+                return {"success": True, "proof": candidate}
+            elif res["status"] == "valid":
+                proofs[i] += candidate + "\n"
+
+    return {"success": False, "proof": None}
+
+
+def evaluate_full_proofs(client, data, repl_path, lean_env_path, task="full_proof_context", dataset_name="mathlib", n=32, batch=False):
+
+    prompts = []
+    for example in data:
+        theorem_statement = example["theoremStatement"].strip() + " := "
+        context = example.get("srcContext", "")
+        prompt = _prompt_fewshot(theorem_statement, context, task=task)
+        prompt = _truncate_middle(prompt, client.context_window)
+        prompts.append(prompt)
+
+    system_prompt = _load_system_prompt()
+
+    if not batch:
+        with ThreadPoolExecutor() as executor:
+            futures = []
+            for prompt in prompts:
+                futures.append(executor.submit(
+                    client.get_raw_response,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt}
+                    ],
+                    n=n
+                ))
+
+            responses = [f.result() for f in tqdm.tqdm(futures, desc=f"Evaluating {len(prompts)} proofs with {client.model_name}")]
+
+    else:
+        responses = client.infer_batch(prompts, batch_name=dataset_name, n=n)
+
+
+    for example, response in zip(data, tqdm.tqdm(responses, desc=f"Checking proofs for {dataset_name} generated by {client.model_name}")):
+        theorem_statement = example["theoremStatement"].strip() + " := "
+        context = example.get("srcContext", "")
+
+        proofs = _unique(_extract_proof(res.message.content, theorem_statement, task) for res in response.choices)
+
+        with ThreadPoolExecutor() as executor:
+            futures = [executor.submit(evaluate_repl, context, theorem_statement + p, repl_path=repl_path, lean_env_path=lean_env_path) for p in proofs]
+            results = [future.result() for future in futures]
+
+        has_proven = False
+        proof_data = {}
+        for proof, result in zip(proofs, results):
+            if result["success"]:
+                has_proven = True
+                proof_data = {"success": True, "proof": proof}
+                break
+        if not has_proven:
+            proof_data = {"success": False, "proof": None}
+
+        example["full_name"] = _get_full_name(theorem_statement)
+        example["proof"] = proof_data
+        example["candidates"] = responses
+
+    return data
+
+
+
 def evaluation_loop(model_name, task="full_proof_context", dataset_name="mathlib", dataset_path=MINICTX2_PATH, log_output=True, output_dir=None, num_samples=32, repl_path=os.path.join(os.getcwd(), "repl"), lean_env_path=None, use_batch_inference=False, vllm_mode="offline"):
     """ Loads a dataset, evaluates the model on each task in it, and evaluates responses. """
 
@@ -151,6 +273,7 @@ def evaluation_loop(model_name, task="full_proof_context", dataset_name="mathlib
         model_name=model_name,
         model_source=source,
     )
+    client.context_window = context_window
 
     # Set the path to the Lean environment based on the dataset if not provided
     if lean_env_path is None:
@@ -158,85 +281,36 @@ def evaluation_loop(model_name, task="full_proof_context", dataset_name="mathlib
 
     data = load_data(dataset_name, path_to_data=dataset_path)
 
-    # TODO: different based on task?
-    prompt_fn = _prompt_fewshot
 
-    # Evaluate examples in parallel...
     successes = 0
-    responses = []
-    if not use_batch_inference:
-        with ThreadPoolExecutor() as executor:
-            futures = []
-            for example in data:
-        # for example in tqdm.tqdm(data, desc=f"Evaluating {dataset_name} with {model_name}"):
-                theorem_statement = example["theoremStatement"].strip() + " := "
-                context = example.get("srcContext", "")
-                prompt = prompt_fn(theorem_statement, context, task=task)
-                prompt = _truncate_middle(prompt, context_window)
 
-                system_prompt = _load_system_prompt()
+    if task.startswith("full_proof"):
+        results = evaluate_full_proofs(
+            client,
+            data,
+            repl_path=repl_path,
+            lean_env_path=lean_env_path,
+            task=task,
+            dataset_name=dataset_name,
+            n=num_samples,
+            batch=use_batch_inference
+        )
 
-                # ...get the model's responses...
-                futures.append(executor.submit(
-                    client.get_raw_response,
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": prompt}
-                        ],
-                        n=num_samples
-                    )
-                )
-
-            for f in tqdm.tqdm(futures, desc=f"Evaluating {dataset_name} with {model_name}"):
-                response = f.result()
-                print(response)
-                responses.append(response)
-
-    else:
-        # Use batch inference for the model
-        messages_list = []
-        for example in data:
-            theorem_statement = example["theoremStatement"] + " := "
+    elif task.startswith("tactic_prediction"):
+        results = []
+        for example in tqdm.tqdm(data, desc=f"Evaluating {dataset_name} with {model_name}"):
+            theorem_statement = example["theoremStatement"].strip() + " := "
             context = example.get("srcContext", "")
-            prompt = prompt_fn(theorem_statement, context, task=task)
-            prompt = _truncate_middle(prompt, context_window)
+            results.append(
+                sampling_search(
+                    k=num_samples,
+                    eval_fn=lambda proofs: [_extract_proof(client.get_response(_prompt_fewshot(theorem_statement + p, context, task)), theorem_statement, task) for p in proofs],
+                    # TODO: parallelize
+                    verify_fn=lambda candidates: [_eval_tactic(tactic, client, example["proofState"], example) for tactic in candidates],
+                    max_iters=10
+                )
+            )
 
-            system_prompt = _load_system_prompt()
-
-            messages_list.append([
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt}
-            ])
-
-        responses = client.infer_batch(messages_list, batch_name=dataset_name, n=num_samples)
-
-    # Ik it could probably be done faster by running it while inference happens, but I wanted to keep it consistent for batch inference too
-    for example, response in zip(data, tqdm.tqdm(responses, desc=f"Checking proofs for {dataset_name} with {model_name}")):
-        theorem_statement = example["theoremStatement"].strip() + " := "
-        context = example.get("srcContext", "")
-        # print(theorem_statement)
-
-        proofs = _unique(_extract_proof(res.message.content, theorem_statement) for res in response.choices)
-        # print(proofs)
-
-        with ThreadPoolExecutor() as executor:
-            futures = [executor.submit(evaluate_repl, context, theorem_statement + p, repl_path=repl_path, lean_env_path=lean_env_path) for p in proofs]
-            results = [future.result() for future in futures]
-
-        has_proven = False
-        proof_data = {}
-        for proof, result in zip(proofs, results):
-            if result["success"]:
-                successes += 1
-                has_proven = True
-                proof_data = {"success": True, "proof": proof}
-                break
-        if not has_proven:
-            proof_data = {"success": False, "proof": None}
-
-        example["full_name"] = _get_full_name(theorem_statement)
-        example["proof"] = proof_data
-        example["candidates"] = proofs
 
     print(f"""{'-'*20} SUMMARY {'-'*20}
 Dataset: {dataset_name}
@@ -257,16 +331,31 @@ Score: {successes} correct out of {len(data)} ({successes/len(data)*100:.2f}%)
 
 
 if __name__ == "__main__":
-    _check_lake()
+    print(sampling_search(
+        {"theoremStatement": "theorem Problem1_1 {a b : ℤ} (h : a ∣ b) : a ∣ (a^2 - b^2)", "srcContext": """import Mathlib.Algebra.Ring.Defs
+import Mathlib.Data.Real.Basic
+import MIL.Common"""},
+        k=4,
+        eval_fn=lambda proofs: ["""  rcases h with ⟨k, akeqb⟩
+  use (k + 1)*(a - b)
+  rw [← mul_assoc, mul_add, ← akeqb]
+  ring""" for _ in proofs],
+        max_iters=10,
+        repl_path=os.path.join(os.getcwd(), "repl"),
+        lean_env_path=os.path.join(os.getcwd(), "test-envs/minictx-v2/mathlib4")
+    ))
+
+    import sys
+    sys.exit(0)
+
     import argparse
     parser = argparse.ArgumentParser()
-    #TODO: argument documentation
     parser.add_argument('--model-name', required=True)
     parser.add_argument(
         '--task',
         default='full_proof_context',
-        choices=['tactic_prediction', 'tactic_prediction_context', 'full_proof', 'full_proof_context', 'tactic_prediction_fewshot'],
-        help="The task for the model to perform. 'tactic_prediction' is for predicting the next tactic based on the theorem statement, 'full_proof' attempts to generate a full proof, while the '..._context' options provide the full context of the repository to the model as well"
+        choices=['tactic_prediction', 'tactic_prediction_context', 'full_proof', 'full_proof_context', 'tactic_prediction_context_premise', 'full_proof_context_premise'],
+        help="The task for the model to perform. 'tactic_prediction' is for predicting the next tactic based on the theorem statement, 'full_proof' attempts to generate a full proof, while the '..._context' options provide the full context of the repository to the model as well."
     )
     parser.add_argument(
         '--dataset-name',
