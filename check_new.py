@@ -16,7 +16,7 @@ MINICTX2_PATH = os.path.join(os.getcwd(), "data/minictx2/test/")
 
 def _prompt_fewshot(theorem_statement, src_context, task="full_proof_context", premises=None):
     """ Generates a prompt with a few examples for the theorem proving task. """
-    if premises is not None and task.endswith("context"):
+    if premises is not None and task.endswith("premise"):
         with open(f"prompt/{task}_premise.txt", "r") as infile:
             prompt = infile.read()
         premises_str = "\n".join(premises)
@@ -25,7 +25,10 @@ def _prompt_fewshot(theorem_statement, src_context, task="full_proof_context", p
     else:
         with open(f"prompt/{task}.txt", "r") as infile:
             prompt = infile.read()
-        prompt = prompt.format(src_context, theorem_statement)
+        if task.endswith("context"):
+            prompt = prompt.format(src_context, theorem_statement)
+        else:
+            prompt = prompt.format(theorem_statement)
 
     return prompt
 
@@ -46,6 +49,7 @@ def _load_system_prompt():
 def _extract_proof(response, theorem_statement, task):
     """ Extracts the contents of the first block in the proof in the relevant format.
      ENSURES: does NOT contain theorem statement """
+    print(response)
     delimiters = _get_proof_delimiters(task)
     # pattern = re.compile(r'```lean(.*?)```', re.DOTALL | re.IGNORECASE)
     pattern = re.compile(rf'{re.escape(delimiters[0])}(.*?){re.escape(delimiters[1])}', re.DOTALL | re.IGNORECASE)
@@ -137,56 +141,42 @@ def load_data(dataset_name, path_to_data=MINICTX2_PATH):
 
     return data
 
-def _eval_tactic(next_tactic, thread, proof_state, example):
-    if 'admit' in next_tactic or 'sorry' in next_tactic:
-        return {"status": "invalid"}
-    # output = thread.submit_and_receive({"tactic": next_tactic, "proofState": proof_state})
-    output = evaluate_repl({"cmd": next_tactic, "env": proof_state}, repl_path=thread.repl_path, lean_env_path=thread.lean_env_path)
-    if not _error_message(output):
-        if output == "" and "sorry" not in output:
-            return {"status": "invalid"}
-        elif example["full_name"] != None and example["full_name"] in next_tactic:
-        # forbid recursion
-            return {"status": "invalid"}
-        elif output["goals"] == [] and len(output) == 2:
-            return {"status": "done", "output": output}
-        elif output["proofState"] > proof_state:
-            return {"status": "valid", "output": output}
-        else:
-            return {"status": "invalid"}
-    return {"status": "invalid"}
 
-def _error_message(output):
-    if output == None: return True
-    if "messages" in output:
-        for d in output["messages"]:
-            return True
-    if "message" in output:
-        if "error" in output["message"]:
-            return True
-    return False
+# def verify_fn(candidates, threads):
+#     with ThreadPoolExecutor() as executor:
+#         futures = [executor.submit(_eval_tactic, candidate, threads[i], example["proofState"], example) for i, (candidate, example) in enumerate(zip(candidates, threads))]
+#         results = [future.result() for future in futures]
+#     return results
 
-def verify_fn(candidates, threads):
+def verify_fn(candidates, context, theorem_statement, repl_path, lean_env_path):
     with ThreadPoolExecutor() as executor:
-        futures = [executor.submit(_eval_tactic, candidate, threads[i], example["proofState"], example) for i, (candidate, example) in enumerate(zip(candidates, threads))]
+        futures = [executor.submit(evaluate_repl, context, theorem_statement + candidate, repl_path=repl_path, lean_env_path=lean_env_path) for candidate in candidates]
         results = [future.result() for future in futures]
-    return results
+    return [{"status": "done", "output": res} if res["success"] else ({"status": "valid"} if res["errors"].startswith("unsolved goals") else {"status": "invalid"}) for res in results]
 
-#TODO: integrate with threading and stuff
+def sampling_eval(client):
+    def _inner(proofs, theorem_statement, context):
+        with ThreadPoolExecutor() as executor:
+            futures = [executor.submit(
+                client.get_response,
+                _prompt_fewshot(theorem_statement + proof, context, task="tactic_prediction_context")
+            ) for proof in proofs]
+            return [_extract_proof(f.result(), theorem_statement, task="tactic_prediction_context") for f in futures]
+    return _inner
+
+#TODO: Pantograph
 def sampling_search(example, k, eval_fn, max_iters, repl_path, lean_env_path):
     """ Performs a tactic-by-tactic sampling search for the proof of a theorem statement. """
     proofs = ["" for _ in range(k)]  # Initialize k empty proofs
-    threads = [InteractiveThread(i, repl_path, lean_env_path, initial_context=example.get("srcContext", "")) for i in range(k)]
-    theorem_statement = example["theoremStatement"].strip() + " := "
-    for t in threads:
-        t.start()
-        # out = t.submit_and_receive({"cmd": theorem_statement + " sorry", "env": 0})
+    context = example.get("srcContext", "")
+    theorem_statement = example["theoremStatement"].strip() + " := by\n" # Tactic mode!
 
     for _ in range(max_iters):
-        candidates = eval_fn(proofs)
+        candidates = eval_fn(proofs, theorem_statement, context)
+        print(candidates)
         candidates = [proofs[i] + candidate for i, candidate in enumerate(candidates)]
 
-        for i, (candidate, res) in enumerate(zip(candidates, verify_fn(candidates, threads))):
+        for i, (candidate, res) in enumerate(zip(candidates, verify_fn(candidates, context, theorem_statement, repl_path, lean_env_path))):
             if res["status"] == "done":
                 return {"success": True, "proof": candidate}
             elif res["status"] == "valid":
@@ -223,11 +213,12 @@ def evaluate_full_proofs(client, data, repl_path, lean_env_path, task="full_proo
             responses = [f.result() for f in tqdm.tqdm(futures, desc=f"Evaluating {len(prompts)} proofs with {client.model_name}")]
 
     else:
+        prompts = [[{"role": "system", "content": system_prompt}, {"role": "user", "content": p}] for p in prompts]
         responses = client.infer_batch(prompts, batch_name=dataset_name, n=n)
 
 
     for example, response in zip(data, tqdm.tqdm(responses, desc=f"Checking proofs for {dataset_name} generated by {client.model_name}")):
-        theorem_statement = example["theoremStatement"].strip() + " := "
+        theorem_statement = example["theoremStatement"].strip() + " :="
         context = example.get("srcContext", "")
 
         proofs = _unique(_extract_proof(res.message.content, theorem_statement, task) for res in response.choices)
@@ -248,7 +239,7 @@ def evaluate_full_proofs(client, data, repl_path, lean_env_path, task="full_proo
 
         example["full_name"] = _get_full_name(theorem_statement)
         example["proof"] = proof_data
-        example["candidates"] = responses
+        example["candidates"] = [res.message.content for res in response.choices]
 
     return data
 
@@ -282,8 +273,6 @@ def evaluation_loop(model_name, task="full_proof_context", dataset_name="mathlib
     data = load_data(dataset_name, path_to_data=dataset_path)
 
 
-    successes = 0
-
     if task.startswith("full_proof"):
         results = evaluate_full_proofs(
             client,
@@ -301,16 +290,32 @@ def evaluation_loop(model_name, task="full_proof_context", dataset_name="mathlib
         for example in tqdm.tqdm(data, desc=f"Evaluating {dataset_name} with {model_name}"):
             theorem_statement = example["theoremStatement"].strip() + " := "
             context = example.get("srcContext", "")
+
+            def eval_parallel(proofs_so_far):
+                with ThreadPoolExecutor() as executor:
+                    futures = [executor.submit(
+                        client.get_response,
+                        _prompt_fewshot(theorem_statement + p, context, task=task),
+                        n=num_samples
+                    ) for p in proofs_so_far]
+                    return [_extract_proof(f.result(), theorem_statement, task) for f in futures]
+
             results.append(
                 sampling_search(
+                    example,
                     k=num_samples,
-                    eval_fn=lambda proofs: [_extract_proof(client.get_response(_prompt_fewshot(theorem_statement + p, context, task)), theorem_statement, task) for p in proofs],
-                    # TODO: parallelize
-                    verify_fn=lambda candidates: [_eval_tactic(tactic, client, example["proofState"], example) for tactic in candidates],
-                    max_iters=10
+                    # eval_fn=lambda proofs: [_extract_proof(client.get_response(_prompt_fewshot(theorem_statement + p, context, task)), theorem_statement, task) for p in proofs],
+                    eval_fn=eval_parallel,
+                    max_iters=10,
+                    repl_path=repl_path,
+                    lean_env_path=lean_env_path,
                 )
             )
 
+    successes = 0
+    for res in results:
+        if res["proof"]["success"]:
+            successes += 1
 
     print(f"""{'-'*20} SUMMARY {'-'*20}
 Dataset: {dataset_name}
@@ -331,22 +336,27 @@ Score: {successes} correct out of {len(data)} ({successes/len(data)*100:.2f}%)
 
 
 if __name__ == "__main__":
-    print(sampling_search(
-        {"theoremStatement": "theorem Problem1_1 {a b : ℤ} (h : a ∣ b) : a ∣ (a^2 - b^2)", "srcContext": """import Mathlib.Algebra.Ring.Defs
-import Mathlib.Data.Real.Basic
-import MIL.Common"""},
-        k=4,
-        eval_fn=lambda proofs: ["""  rcases h with ⟨k, akeqb⟩
-  use (k + 1)*(a - b)
-  rw [← mul_assoc, mul_add, ← akeqb]
-  ring""" for _ in proofs],
-        max_iters=10,
-        repl_path=os.path.join(os.getcwd(), "repl"),
-        lean_env_path=os.path.join(os.getcwd(), "test-envs/minictx-v2/mathlib4")
-    ))
-
-    import sys
-    sys.exit(0)
+#     client = Client(
+#         model_name="gemini-2.5-flash-preview-05-20",
+#     )
+#
+#     print(sampling_search(
+#         {"theoremStatement": "theorem Problem1_1 {a b : ℤ} (h : a ∣ b) : a ∣ (a^2 - b^2)", "srcContext": """import Mathlib.Algebra.Ring.Defs
+# import Mathlib.Data.Real.Basic
+# import Mathlib.Tactic"""},
+#         k=2,
+#   #       eval_fn=lambda proofs: ["""  rcases h with ⟨k, akeqb⟩
+#   # use (k + 1)*(a - b)
+#   # rw [← mul_assoc, mul_add, ← akeqb]
+#   # ring""" for _ in proofs],
+#         eval_fn=sampling_eval(client),
+#         max_iters=10,
+#         repl_path=os.path.join(os.getcwd(), "repl"),
+#         lean_env_path=os.path.join(os.getcwd(), "test-envs/minictx-v2/mathlib4")
+#     ))
+#
+#     import sys
+#     sys.exit(0)
 
     import argparse
     parser = argparse.ArgumentParser()
@@ -395,3 +405,20 @@ import MIL.Common"""},
     # python3 check_new.py --model-name "gemini-2.5-pro-preview-05-06" --dataset-name "mathlib"
     # python3 check_new.py --model-name "o4-mini-global-batch" --dataset-name "mathlib" --num-samples 32 --use-batch-inference True
 
+    # python3 check_new.py --model-name "o4-mini-global-batch" --dataset-name "carleson" --num-samples 8 --use-batch-inference True
+    # python3 check_new.py --model-name "o4-mini-global-batch" --dataset-name "ConNF" --num-samples 8 --use-batch-inference True
+    # python3 check_new.py --model-name "o4-mini-global-batch" --dataset-name "FLT" --num-samples 8 --use-batch-inference True
+    # python3 check_new.py --model-name "o4-mini-global-batch" --dataset-name "foundation" --num-samples 8 --use-batch-inference True
+    # python3 check_new.py --model-name "o4-mini-global-batch" --dataset-name "HepLean" --num-samples 8 --use-batch-inference True
+    # python3 check_new.py --model-name "o4-mini-global-batch" --dataset-name "Seymour" --num-samples 8 --use-batch-inference True
+
+
+    # Carleson: 18/50
+    # ConNF: ??? (repl broken)
+    # FLT: 13/34
+    # Foundation: 27/50
+    # HepLean: 22/50
+    # Seymour: 30/50
+    # mathlib: 23/50
+    #
+    # All: 133/284 (46.9%)

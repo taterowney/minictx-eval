@@ -12,4 +12,3 @@ Put the next tactic inside [TAC]...[/TAC]
 [STATE]
 {}
 [/STATE]
-[TAC]

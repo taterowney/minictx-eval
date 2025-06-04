@@ -208,12 +208,13 @@ def batch_inference(model, messages, job_tags={}, **kwargs):
                 folder_path = os.path.join(os.getcwd(), "batch-inference/jobs", job)
                 break
         if not folder_path:
-            folder_path = upload_data(model, messages, **kwargs)
+            folder_path = upload_data(model, messages, job_tags=job_tags, **kwargs)
 
     status = get_status(folder_path)
     if status["status"] == "pending":
         upload_batch(folder_path)
-    if status["status"] == "running":
+        status = get_batch_results(folder_path)
+    if status["status"] == "running" or status["status"] == "validating":
         status = get_batch_results(folder_path)
     if status["status"] == "completed":
         return download_results(folder_path)
