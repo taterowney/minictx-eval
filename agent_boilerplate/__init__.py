@@ -162,7 +162,8 @@ class Client:
     def infer_batch(self, messages_list, batch_name="default", **kwargs):
         if self.model_source == "azure":
             from agent_boilerplate.azure_batch_inference import batch_inference
-            return batch_inference(self.model_name, messages_list, job_tags={"name": batch_name, "n": kwargs.get("n", 1)}, **self.to_OpenAI_format(kwargs))
+            tags = kwargs.pop("job_tags", {})
+            return batch_inference(self.model_name, messages_list, job_tags={"name": batch_name, "n": kwargs.get("n", 1), **tags}, **self.to_OpenAI_format(kwargs))
         elif self.model_source == "vllm":
             from vllm import LLM
             from vllm import SamplingParams
