@@ -1,9 +1,6 @@
 [submodule "math2001-bump"]
 	path = math2001-bump
 	url = https://github.com/hanwenzhu/math2001-bump.git
-[submodule "repl"]
-	path = repl
-	url = https://github.com/leanprover-community/repl.git
 [submodule "test-envs/minictx-v2/mathlib4"]
 	path = test-envs/minictx-v2/mathlib4
 	url = https://github.com/leanprover-community/mathlib4.git
@@ -25,3 +22,9 @@
 [submodule "test-envs/minictx-v2/seymour"]
 	path = test-envs/minictx-v2/seymour
 	url = https://github.com/Ivan-Sergeyev/seymour.git
+[submodule "repls/repl-4.16.0"]
+	path = repls/repl-4.16.0
+	url = https://github.com/leanprover-community/repl.git
+[submodule "repls/repl-4.16.0-rc1"]
+	path = repls/repl-4.16.0-rc1
+	url = https://github.com/leanprover-community/repl.git

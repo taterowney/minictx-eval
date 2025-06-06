@@ -375,7 +375,8 @@ if __name__ == "__main__":
     # parser.add_argument('--max-iters', type=int, default=100)
     parser.add_argument('--num-samples', type=int, default=8, help="The number of samples to generate for each theorem (best of N).")
     # parser.add_argument('--temperatures', type=float, default=0.0)
-    parser.add_argument('--repl-path', default=os.path.join(os.getcwd(), "repl"), help="The path to the REPL submodule, used to evaluate the model's proofs.")
+    #TODO: automatically select correct REPL path based on dataset name
+    parser.add_argument('--repl-path', default=os.path.join(os.getcwd(), "repls/repl-4.16.0"), help="The path to the REPL submodule, used to evaluate the model's proofs.")
     parser.add_argument('--lean-env-path', default=None, help="The path to the Lean environment to use for evaluating proofs. If not specified, it will be automatically determined based on the dataset name.")
     parser.add_argument('--use-batch-inference', type=bool, default=False, help="Whether to use batch inference for the model. May not be supported by all models. For API models, this generally takes a very long time, but is more cost-effective.")
     parser.add_argument("--vllm-mode", default="offline", choices=["offline", "online"], help="When using vLLM, whether to use online or offline inference. Online inference requires a vLLM server to be running (vllm serve --port 8000 --model <model_name>). Offline inference does not support reasoning models.")
