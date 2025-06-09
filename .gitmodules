@@ -1,30 +1,3 @@
 [submodule "math2001-bump"]
 	path = math2001-bump
 	url = https://github.com/hanwenzhu/math2001-bump.git
-[submodule "test-envs/minictx-v2/mathlib4"]
-	path = test-envs/minictx-v2/mathlib4
-	url = https://github.com/leanprover-community/mathlib4.git
-[submodule "test-envs/minictx-v2/carleson"]
-	path = test-envs/minictx-v2/carleson
-	url = https://github.com/fpvandoorn/carleson.git
-[submodule "test-envs/minictx-v2/con-nf"]
-	path = test-envs/minictx-v2/con-nf
-	url = https://github.com/leanprover-community/con-nf.git
-[submodule "test-envs/minictx-v2/FLT"]
-	path = test-envs/minictx-v2/FLT
-	url = https://github.com/ImperialCollegeLondon/FLT.git
-[submodule "test-envs/minictx-v2/Foundation"]
-	path = test-envs/minictx-v2/Foundation
-	url = https://github.com/FormalizedFormalLogic/Foundation.git
-[submodule "test-envs/minictx-v2/PhysLean"]
-	path = test-envs/minictx-v2/PhysLean
-	url = https://github.com/HEPLean/PhysLean.git
-[submodule "test-envs/minictx-v2/seymour"]
-	path = test-envs/minictx-v2/seymour
-	url = https://github.com/Ivan-Sergeyev/seymour.git
-[submodule "repls/repl-4.16.0"]
-	path = repls/repl-4.16.0
-	url = https://github.com/leanprover-community/repl.git
-[submodule "repls/repl-4.16.0-rc1"]
-	path = repls/repl-4.16.0-rc1
-	url = https://github.com/leanprover-community/repl.git
