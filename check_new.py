@@ -240,7 +240,6 @@ def evaluate_full_proofs(client, data, repl_path, lean_env_path, task="full_proo
             if result["success"]:
                 has_proven = True
                 proof_data = {"success": True, "proof": proof}
-                break
         if not has_proven:
             proof_data = {"success": False, "proof": None}
 
@@ -248,7 +247,6 @@ def evaluate_full_proofs(client, data, repl_path, lean_env_path, task="full_proo
         example["proof"] = proof_data
         example["candidates"] = [res.message.content for res in response.choices]
         ret.append(example)
-        break
 
     return ret
 
@@ -329,7 +327,7 @@ def evaluation_loop(model_name, task="full_proof_context", dataset_name="mathlib
 
     successes = 0
     for res in results:
-        print(res)
+        # print(res)
         if res["proof"]["success"]:
             successes += 1
 
@@ -402,7 +400,7 @@ if __name__ == "__main__":
     # python3 check_new.py --model-name "o4-mini-global-batch" --dataset-name "mathlib" --num-samples 32 --use-batch-inference True
 
     # python3 check_new.py --model-name "o4-mini-global-batch" --dataset-name "carleson" --num-samples 8 --use-batch-inference True
-    # python3 check_new.py --model-name "o4-mini-global-batch" --dataset-name "ConNF" --num-samples 8 --use-batch-inference True
+    # python3 check_new.py --model-name "o4-mini-global-batch" --dataset-name "ConNF" --num-samples 8 --use-batch-inference True --repl-path "repls/repl-4.16.0-rc1"
     # python3 check_new.py --model-name "o4-mini-global-batch" --dataset-name "FLT" --num-samples 8 --use-batch-inference True
     # python3 check_new.py --model-name "o4-mini-global-batch" --dataset-name "foundation" --num-samples 8 --use-batch-inference True
     # python3 check_new.py --model-name "o4-mini-global-batch" --dataset-name "HepLean" --num-samples 8 --use-batch-inference True
@@ -410,15 +408,16 @@ if __name__ == "__main__":
 
 
     # Carleson: 18/50
-    # ConNF: ??? (repl broken)
+    # ConNF: 15/50
     # FLT: 13/34
     # Foundation: 27/50
     # HepLean: 22/50
     # Seymour: 30/50
     # mathlib: 23/50
     #
-    # All: 133/284 (46.9%)
+    # All: 148/334 (44.3%)
 
 
 
     # python3 check_new.py --model-name "o4-mini-global-batch" --task="full_proof_repository" --dataset-name "carleson" --num-samples 8 --use-batch-inference True
+    # python3 check_new.py --model-name "o4-mini-global-batch" --task="full_proof_repository" --dataset-name "con-nf" --num-samples 1 --use-batch-inference True

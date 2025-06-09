@@ -143,7 +143,8 @@ def evaluate_repl(*args, repl_path=os.path.join(os.getcwd(), "repl"), lean_env_p
         temp.flush()
         temp_name = temp.name
 
-    command = f'lake env {repl_path}/.lake/build/bin/repl < {temp_name}'
+    command = f'lake env {os.path.join(os.getcwd(), repl_path, '.lake/build/bin/repl')} < {temp_name}'
+    # print(command)
     try:
         result = subprocess.run(command, shell=True, capture_output=True, text=True, cwd=lean_env_path, timeout=60)
         result_dict = result.stdout.split("\n\n")
@@ -169,57 +170,57 @@ def evaluate_repl(*args, repl_path=os.path.join(os.getcwd(), "repl"), lean_env_p
         return {"success": True, "errors": None}
 
     return {"success": False, "errors": "No environment found."}
-
-def try_tactic(context_and_theorem, tactic, repl_path=os.path.join(os.getcwd(), "repl"), lean_env_path=os.path.join(os.getcwd(), "test-envs", "minictx-v2", "mathlib4")):
-    """
-    Tries to apply a tactic to a theorem in a Lean REPL.
-    Args:
-        context_and_theorem: A string containing the context and theorem to be proved.
-        tactic: The tactic to be applied.
-        repl_path: Path to the REPL submodule.
-        lean_env_path: Path to the Lean project in which to execute the code.
-    Returns:
-        A dictionary with the result of the tactic application.
-    """
-    if "\n" in tactic:
-        tactic = tactic.split("\n")[0]
-    context_and_theorem = context_and_theorem.strip()
-    if not context_and_theorem.endswith("sorry"):
-        # if context_and_theorem.endswith(":=") or context_and_theorem.endswith("by"):
-        #     context_and_theorem += " all_goals admit"
-        # elif "\n" in context_and_theorem and context_and_theorem.split("\n")[-1].startswith(" "):
-        #     indent_size = len(context_and_theorem.split("\n")[-1]) - len(context_and_theorem.split("\n")[-1].lstrip())
-        #     context_and_theorem += "\n" + " " * indent_size + "all_goals admit"
-        # else:
-        context_and_theorem += "\n  all_goals admit"
-
-    print(context_and_theorem)
-    print(tactic)
-
-    with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp:
-        json.dump({"cmd": context_and_theorem}, temp, ensure_ascii=False)
-        temp.write("\n\n")
-        json.dump({"tactic": tactic, "proofState": 0}, temp, ensure_ascii=False)
-        temp.write("\n\n")
-        temp.flush()
-        temp_name = temp.name
-
-    command = f'lake env {repl_path}/.lake/build/bin/repl < {temp_name}'
-    try:
-        result = subprocess.run(command, shell=True, capture_output=True, text=True, cwd=lean_env_path, timeout=60)
-        result_dict = result.stdout.split("\n\n")
-        print(result)
-        outputs = []
-        for res in result_dict:
-            if res.strip():
-                outputs.append(json.loads(res.strip()))
-    except Exception as e:
-        return {"success": False, "errors": e}
-
-    if not outputs:
-        return {"success": False, "errors": "No output from the REPL. If you're running this through a JetBrains IDE, you might have to run this script directly from the terminal instead."}
-
-    print(outputs)
+#
+# def try_tactic(context_and_theorem, tactic, repl_path=os.path.join(os.getcwd(), "repls", "repl-4.16.0"), lean_env_path=os.path.join(os.getcwd(), "test-envs", "minictx-v2", "mathlib4")):
+#     """
+#     Tries to apply a tactic to a theorem in a Lean REPL.
+#     Args:
+#         context_and_theorem: A string containing the context and theorem to be proved.
+#         tactic: The tactic to be applied.
+#         repl_path: Path to the REPL submodule.
+#         lean_env_path: Path to the Lean project in which to execute the code.
+#     Returns:
+#         A dictionary with the result of the tactic application.
+#     """
+#     if "\n" in tactic:
+#         tactic = tactic.split("\n")[0]
+#     context_and_theorem = context_and_theorem.strip()
+#     if not context_and_theorem.endswith("sorry"):
+#         # if context_and_theorem.endswith(":=") or context_and_theorem.endswith("by"):
+#         #     context_and_theorem += " all_goals admit"
+#         # elif "\n" in context_and_theorem and context_and_theorem.split("\n")[-1].startswith(" "):
+#         #     indent_size = len(context_and_theorem.split("\n")[-1]) - len(context_and_theorem.split("\n")[-1].lstrip())
+#         #     context_and_theorem += "\n" + " " * indent_size + "all_goals admit"
+#         # else:
+#         context_and_theorem += "\n  all_goals admit"
+#
+#     print(context_and_theorem)
+#     print(tactic)
+#
+#     with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp:
+#         json.dump({"cmd": context_and_theorem}, temp, ensure_ascii=False)
+#         temp.write("\n\n")
+#         json.dump({"tactic": tactic, "proofState": 0}, temp, ensure_ascii=False)
+#         temp.write("\n\n")
+#         temp.flush()
+#         temp_name = temp.name
+#
+#     command = f'lake env {repl_path}/.lake/build/bin/repl < {temp_name}'
+#     try:
+#         result = subprocess.run(command, shell=True, capture_output=True, text=True, cwd=lean_env_path, timeout=60)
+#         result_dict = result.stdout.split("\n\n")
+#         print(result)
+#         outputs = []
+#         for res in result_dict:
+#             if res.strip():
+#                 outputs.append(json.loads(res.strip()))
+#     except Exception as e:
+#         return {"success": False, "errors": e}
+#
+#     if not outputs:
+#         return {"success": False, "errors": "No output from the REPL. If you're running this through a JetBrains IDE, you might have to run this script directly from the terminal instead."}
+#
+#     print(outputs)
 
 
 if __name__ == '__main__':
@@ -227,10 +228,10 @@ if __name__ == '__main__':
 import Mathlib.Data.Real.Basic
 import Mathlib.Tactic
 
-theorem Problem1_1 {a b : ℤ} (h : a ∣ b) : a ∣ (a^2 - b^2) := by
-  refine Int.dvd_sub ?_ ?_
-    · exact Dvd.intro_left (a.pow 1) rfl
-  refine Dvd.dvd.pow h ?refine_2.x"""
-    tactic = "linarith"
+theorem Test : (2 : Nat) + 2 = 4 := by
+   linarith"""
+    # tactic = "linarith"
 
-    result = try_tactic(ctx, tactic)
+    # result = try_tactic(ctx, tactic)
+
+    print(evaluate_repl(ctx, repl_path="repls/repl-4.16.0-rc1", lean_env_path="test-envs/minictx-v2/con-nf/"))

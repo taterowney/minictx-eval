@@ -1,0 +1,10 @@
+{
+  "o4 Mini (Jun 2025)": {
+    "link": "https://platform.openai.com/docs/models/",
+    "premise-selection":{
+      "n": 8,
+      "passed": 148,
+      "total": 334
+    }
+  }
+}
