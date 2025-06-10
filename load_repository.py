@@ -18,7 +18,13 @@ def load_repository_context(repo_path, file_name, theorem):
     """
     Returns the context of a theorem in a pair containing just the theorem's file (with imports) and everything in a single file that the theorem depends on.
     """
-    if file_name.split("/")[0] == repo_path.split("/")[-1]:
+    minictx_repo_names = {
+        "Foundation": "foundation",
+        "con-nf": "ConNF",
+        "Physlean": "HepLean",
+        "seymour": "Seymour",
+    }
+    if file_name.split("/")[0] == repo_path.split("/")[-1] or (minictx_repo_names.get(repo_path.split("/")[-1], None) == file_name.split("/")[0]):
         file_name = "/".join(file_name.split("/")[1:])
 
     file_path = os.path.join(repo_path, file_name)
@@ -81,7 +87,7 @@ def load_repository_context(repo_path, file_name, theorem):
 
     # print(external_imports)
 
-    return out
+    return out.encode('utf-16','surrogatepass').decode('utf-16')
 
 
 def topological_order(graph):
@@ -110,7 +116,7 @@ def topological_order(graph):
                 queue.append(v)
 
     if len(order) != len(in_degree):
-        raise ValueError("Graph contains a cycle")
+        raise ValueError("Circular import (?!?!?)")
     return order
 
 

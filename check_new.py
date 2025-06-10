@@ -51,6 +51,7 @@ def _extract_proof(response, theorem_statement, task):
      ENSURES: does NOT contain theorem statement """
     # print(response)
     delimiters = _get_proof_delimiters(task)
+    theorem_statement = theorem_statement.strip()
     # pattern = re.compile(r'```lean(.*?)```', re.DOTALL | re.IGNORECASE)
     pattern = re.compile(rf'{re.escape(delimiters[0])}(.*?){re.escape(delimiters[1])}', re.DOTALL | re.IGNORECASE)
     match = re.search(pattern, response)
@@ -80,6 +81,13 @@ def _get_lean_environment_name(dataset_name):
         raise ValueError(f"Lean environment directory {dir} is not installed. Run `git submodule init` and `git submodule update`, the go to {dir} and run `lake exe cache get` and `lake build` to install it.")
     return dir
 
+def _get_repl_path(dataset_name):
+    """ Returns the path to the REPL executable for the given Lean environment. """
+    if dataset_name.lower() not in ["mathlib", "carleson", "connf", "flt", "foundation", "heplean", "seymour"]:
+        raise ValueError(f"{dataset_name} is not a miniCTX-v2 dataset, so can't automatically determine which REPL to use. Please specify one using the --repl-path argument.")
+    if dataset_name.lower() == "connf":
+        return os.path.join(os.getcwd(), "repls/repl-4.16.0-rc1") # Bruh moment
+    return os.path.join(os.getcwd(), "repls/repl-4.16.0")
 
 def _unique(texts):
     """ Returns unique texts from the list, preserving order. Removes empty strings. """
@@ -234,12 +242,14 @@ def evaluate_full_proofs(client, data, repl_path, lean_env_path, task="full_proo
             futures = [executor.submit(evaluate_repl, context, theorem_statement + p, repl_path=repl_path, lean_env_path=lean_env_path) for p in proofs]
             results = [future.result() for future in futures]
 
+        # print(results)
         has_proven = False
         proof_data = {}
         for proof, result in zip(proofs, results):
             if result["success"]:
                 has_proven = True
                 proof_data = {"success": True, "proof": proof}
+                break
         if not has_proven:
             proof_data = {"success": False, "proof": None}
 
@@ -282,6 +292,9 @@ def evaluation_loop(model_name, task="full_proof_context", dataset_name="mathlib
     # Set the path to the Lean environment based on the dataset if not provided
     if lean_env_path is None:
         lean_env_path = _get_lean_environment_name(dataset_name)
+    # Set the REPL path based on the dataset if not provided
+    if repl_path is None:
+        repl_path = _get_repl_path(dataset_name)
 
     data = load_data(dataset_name, path_to_data=dataset_path)
 
@@ -348,8 +361,46 @@ Score: {successes} correct out of {len(data)} ({successes/len(data)*100:.2f}%)
                 f.write(json.dumps(example) + "\n")
         print(f"Results saved to {output_file}")
 
+def eval_at_best_of_n(output_path):
+    """ Evaluates the best of 1 results from a file. """
+    totals = {}
+    with open(output_path, "r") as f:
+        for line in f.readlines():
+            example = json.loads(line)
+            theorem_statement = example["theoremStatement"].strip() + " := "
+            for i, candidate in enumerate(example["candidates"]):
+                proof = _extract_proof(candidate, theorem_statement, task="full_proof_context")
+                if example["proof"]["success"] and proof.strip() == example["proof"]["proof"].strip():
+                    totals[i] = totals.get(i, 0) + 1
+                    break
+    cumulative = [0]
+    for i in range(1, max(totals.keys()) + 2):
+        cumulative.append(cumulative[-1] + totals.get(i-1, 0))
+    print(cumulative[1:])
+    return cumulative[1:]
+
+def eval_all():
+    totals = []
+    for dir in ["carleson/03-06-2025-12-19:o4-mini-global-batch@8", "ConNF/07-06-2025-11-24:o4-mini-global-batch@8", "FLT/03-06-2025-12-14:o4-mini-global-batch@8", "foundation/03-06-2025-12-02:o4-mini-global-batch@8", "HepLean/03-06-2025-12-18:o4-mini-global-batch@8", "Seymour/03-06-2025-12-22:o4-mini-global-batch@8", "mathlib/10-06-2025-11-43:o4-mini-global-batch@32"]:
+        dir = f"output/{dir}/results.jsonl"
+        totals.append(eval_at_best_of_n(dir))
+    summed = [0] * 8
+    for total in totals:
+        for i in range(8):
+            if i < len(total):
+                summed[i] += total[i]
+            else:
+                summed[i] += total[-1]
+    print(summed)
+
 
 if __name__ == "__main__":
+    # eval_at_best_of_n("output/FLT/03-06-2025-12-14:o4-mini-global-batch@8/results.jsonl")
+    eval_all()
+    import sys
+    sys.exit(0)
+
+
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--model-name', required=True)
@@ -374,7 +425,7 @@ if __name__ == "__main__":
     parser.add_argument('--num-samples', type=int, default=8, help="The number of samples to generate for each theorem (best of N).")
     # parser.add_argument('--temperatures', type=float, default=0.0)
     #TODO: automatically select correct REPL path based on dataset name
-    parser.add_argument('--repl-path', default=os.path.join(os.getcwd(), "repls/repl-4.16.0"), help="The path to the REPL submodule, used to evaluate the model's proofs.")
+    parser.add_argument('--repl-path', default=None, help="The path to the REPL submodule, used to evaluate the model's proofs.")
     parser.add_argument('--lean-env-path', default=None, help="The path to the Lean environment to use for evaluating proofs. If not specified, it will be automatically determined based on the dataset name.")
     parser.add_argument('--use-batch-inference', type=bool, default=False, help="Whether to use batch inference for the model. May not be supported by all models. For API models, this generally takes a very long time, but is more cost-effective.")
     parser.add_argument("--vllm-mode", default="offline", choices=["offline", "online"], help="When using vLLM, whether to use online or offline inference. Online inference requires a vLLM server to be running (vllm serve --port 8000 --model <model_name>). Offline inference does not support reasoning models.")
@@ -420,4 +471,17 @@ if __name__ == "__main__":
 
 
     # python3 check_new.py --model-name "o4-mini-global-batch" --task="full_proof_repository" --dataset-name "carleson" --num-samples 8 --use-batch-inference True
-    # python3 check_new.py --model-name "o4-mini-global-batch" --task="full_proof_repository" --dataset-name "con-nf" --num-samples 1 --use-batch-inference True
+
+    # python3 check_new.py --model-name "o4-mini-global-batch" --task="full_proof_repository" --dataset-name "flt" --num-samples 1 --use-batch-inference True
+    # python3 check_new.py --model-name "o4-mini-global-batch" --task="full_proof_repository" --dataset-name "connf" --num-samples 1 --use-batch-inference True
+    # python3 check_new.py --model-name "o4-mini-global-batch" --task="full_proof_repository" --dataset-name "foundation" --num-samples 1 --use-batch-inference True
+    # python3 check_new.py --model-name "o4-mini-global-batch" --task="full_proof_repository" --dataset-name "heplean" --num-samples 1 --use-batch-inference True
+    # python3 check_new.py --model-name "o4-mini-global-batch" --task="full_proof_repository" --dataset-name "seymour" --num-samples 1 --use-batch-inference True
+
+    # @N=1
+    # Carleson: idk (Azure broke)
+    # ConNF: 6/50
+    # FLT: 6/34
+    # Foundation: 18/50
+    # HepLean: 5/50
+    # Seymour: 9/50
