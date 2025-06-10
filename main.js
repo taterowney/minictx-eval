@@ -1,8 +1,6 @@
 const table = document.getElementById("results");
-//const plusedTable = document.getElementById("plused");
 const benchmarkRadio = document.getElementById("Benchmark");
-//const chartDom = document.getElementById("chart");
-//var chart = echarts.init(chartDom);
+
 
 const dataUrl = "results.json";
 
@@ -21,27 +19,11 @@ const calcAverage = (a, b) => {
 var data;
 /*
 After calculating the average, the data should be like this:
-data[Model]["pass@1"] = {
-  "humaneval": ...,
-  "mbpp": ...,
-  "humaneval+": ...,
-  "mbpp+": ...,
-  "average": ...,
-  "average+": ...,
-}
+
 */
 if (xhr.status === 200) {
   data = JSON.parse(xhr.responseText);
-//  Object.keys(data).forEach((key) => {
-//    data[key]["pass@1"]["average"] = calcAverage(
-//      data[key]["pass@1"]["humaneval"],
-//      data[key]["pass@1"]["mbpp"],
-//    );
-//    data[key]["pass@1"]["average+"] = calcAverage(
-//      data[key]["pass@1"]["humaneval+"],
-//      data[key]["pass@1"]["mbpp+"],
-//    );
-//  });
+
   data = Object.keys(data).map((key) => {
     return {
       Model: key,
@@ -59,122 +41,15 @@ const clearTable = () => {
 };
 
 
-//var chartOption = {
-//  legend: {
-//    data: ["pass@1*"],
-//  },
-//  grid: {
-//    left: "1%",
-//    right: "4%",
-//    bottom: "3%",
-//    containLabel: true,
-//  },
-//  xAxis: {
-//    name: "Act. Size",
-//    type: "category",
-//    boundaryGap: false,
-//    data: [],
-//    axisLabel: {
-//      formatter: function (value) {
-//        return value + "B";
-//      },
-//    },
-//  },
-//  yAxis: {
-//    name: "PASS@1 (greedy decoding)",
-//    type: "value",
-//    show: true,
-//    nameTextStyle: {
-//      align: "left",
-//    },
-//    splitLine: {
-//      show: true,
-//      lineStyle: {
-//        type: "dashed",
-//      },
-//    },
-//  },
-//  legend: {
-//    data: ["base", "instructed"],
-//    itemStyle: {
-//      opacity: 1.0,
-//    },
-//  },
-//  tooltip: {
-//    trigger: "item",
-//    axisPointer: {
-//      type: "cross",
-//    },
-//  },
-//  series: [
-//    {
-//      name: "base",
-//      type: "scatter",
-//      data: [],
-//      itemStyle: {
-//        color: "#91cc75",
-//        opacity: 0.2,
-//      },
-//      emphasis: {
-//        focus: "series",
-//      },
-//      lineStyle: {
-//        width: 2,
-//      },
-//      markLine: {
-//        symbol: "none",
-//        emphasis: {
-//          label: {
-//            position: "middle",
-//            formatter: function (params) {
-//              return params.data.name;
-//            },
-//          },
-//        },
-//        data: [],
-//      },
-//    },
-//    {
-//      name: "instructed",
-//      type: "scatter",
-//      data: [],
-//      itemStyle: {
-//        color: "#5470c6",
-//        opacity: 0.2,
-//      },
-//      emphasis: {
-//        focus: "series",
-//      },
-//      lineStyle: {
-//        width: 2,
-//      },
-//      markLine: {
-//        symbol: "none",
-//        emphasis: {
-//          label: {
-//            position: "middle",
-//            formatter: function (params) {
-//              return params.data.name;
-//            },
-//          },
-//        },
-//        data: [],
-//      },
-//    },
-//  ],
-//};
-
 const theaders = ["Model", "Pass Rate"];
-
-// score: 'average', 'humaneval', 'mbpp', 'humaneval+', 'mbpp+'
-const displayTable = (table, score) => {
+const displayTable = (table, score, n) => {
   // filter out Null
   data = globalData
     .filter((row) => {
-      return row[score] != null;
+      return row[score] != null && row[score]["passed"].length > n && row[score]["total"] > 0;
     })
     .sort((a, b) => {
-      return b[score]["passed"]/b[score]["total"] - a[score]["passed"]/a[score]["total"];
+      return b[score]["passed"][n]/b[score]["total"] - a[score]["passed"][n]/a[score]["total"];
     });
   var thead = document.createElement("thead");
   var headerRow = document.createElement("tr");
@@ -212,7 +87,8 @@ const displayTable = (table, score) => {
     rank++;
     var modelLink = document.createElement("a");
     modelLink.href = row["link"];
-    modelLink.textContent = row["Model"] + " @" + row[score]["n"];
+    // modelLink.textContent = row["Model"] + " @" + row[score]["n"];
+    modelLink.textContent = row["Model"]
     modelLink.classList.add("link-underline-primary");
     modelLink.classList.add("text-nowrap");
     modelCell.appendChild(modelLink);
@@ -248,132 +124,47 @@ const displayTable = (table, score) => {
 //      passCell.textContent = "⚡";
 //      passCell.classList.add("text-success");
 //    }
-    passCell.textContent += row[score]["passed"] + "/" + row[score]["total"] + " (" + Math.round((row[score]["passed"] / row[score]["total"]) * 1000) / 10 + "%)";
+    passCell.textContent += row[score]["passed"][n] + "/" + row[score]["total"] + " (" + Math.round((row[score]["passed"][n] / row[score]["total"]) * 1000) / 10 + "%)";  
     dataRow.appendChild(passCell);
     tbody.appendChild(dataRow);
   });
   table.appendChild(tbody);
 };
 
-//const displayChart = (score) => {
-//  const maxMarkLineModels = 8;
-//  // sort first
-//  const data = globalData
-//    .filter((model) => {
-//      return model["pass@1"][score] != null;
-//    })
-//    .sort((a, b) => {
-//      return b["pass@1"][score] - a["pass@1"][score];
-//    });
-//
-//  const sizeList = [
-//    ...new Set(
-//      data
-//        .filter((model) => model["size"] != null)
-//        .map((model) => Math.round(model["size"])),
-//    ),
-//  ].sort((a, b) => {
-//    return a - b;
-//  });
-//
-//  chartOption.xAxis.data = sizeList;
-//  chartOption.yAxis.max =
-//    1 + Math.max(...data.map((model) => model["pass@1"][score]));
-//
-//  const nonPromptedModels = data.filter(
-//    (model) => model["prompted"] == false && model["size"] != null,
-//  );
-//  const promptedModels = data.filter(
-//    (model) => model["prompted"] == true && model["size"] != null,
-//  );
-//  const nonSizeModels = data.filter(
-//    model => model.size === null
-//  ).slice(0, maxMarkLineModels);
-//
-//  nonSizeModels.forEach((model) => {
-//    chartOption.series[1].markLine.data.push({
-//      name: model["Model"],
-//      yAxis: model["pass@1"][score],
-//    });
-//  });
-//
-//  [nonPromptedModels, promptedModels].forEach((series, idx) => {
-//    series.forEach((model) => {
-//      chartOption.series[idx].data.push({
-//        name: model["Model"],
-//        value: [`${Math.round(model["size"])}`, model["pass@1"][score]],
-//      });
-//    });
-//  });
-//
-//  const offsets = [[50, 0]]
-//    .concat(Array.from({ length: sizeList.length - 2 }, () => [0, 0]))
-//    .concat([[-50, 0]]);
-//  sizeList.forEach((size, idx) => {
-//    const bestNonPromptedModel = nonPromptedModels
-//      .filter((model) => Math.round(model["size"]) == size)
-//      .sort((a, b) => {
-//        return b["pass@1"][score] - a["pass@1"][score];
-//      })[0];
-//    const bestPromptedModel = promptedModels
-//      .filter((model) => Math.round(model["size"]) == size)
-//      .sort((a, b) => {
-//        return b["pass@1"][score] - a["pass@1"][score];
-//      })[0];
-//    const hightLightBest = (series, model) => {
-//      const point = chartOption.series[series].data.find(
-//        (point) => point.name == model["Model"],
-//      );
-//      point.itemStyle = {
-//        opacity: 1.0,
-//      };
-//      point.label = {
-//        show: true,
-//        position: "top",
-//        offset: offsets[idx],
-//        formatter: function (params) {
-//          return params.data.name;
-//        },
-//        color: "inherit",
-//      };
-//    };
-//    if (bestNonPromptedModel) {
-//      hightLightBest(0, bestNonPromptedModel);
-//    }
-//    if (bestPromptedModel) {
-//      hightLightBest(1, bestPromptedModel);
-//    }
-//  });
-//
-//  chart.setOption(chartOption);
-//};
 
 const contextRadio = document.getElementById("context");
 const fullRepoRadio = document.getElementById("fullRepo");
 
+const slider      = document.getElementById("bestOfRange");
+const bestOfValue = document.getElementById("bestOfValue");
+
+// compute the largest N across both modes
+const maxN = 8;
+
+slider.max   = maxN;
+slider.value = 1;
+bestOfValue.textContent = "1";
+
+function renderForBestOfN(n) {
+  clearTable();
+  const key = contextRadio.checked ? "in-file" : "full";
+  displayTable(table, key, n-1);
+}
+
+slider.addEventListener("input", e => {
+  bestOfValue.textContent = e.target.value;
+  renderForBestOfN(+e.target.value);
+});
+
+
 contextRadio.addEventListener("click", function () {
   clearTable();
-//  displayTable(originTable, "humaneval");
-//  displayTable(plusedTable, "humaneval+");
-  console.log(table);
-
-  displayTable(table, "premise-selection");
-//  clearChart();
-//  displayChart("humaneval+");
+  displayTable(table, "in-file", slider.value - 1);
 });
 
 fullRepoRadio.addEventListener("click", function () {
-    clearTable();
-//    displayTable(originTable, "mbpp");
-//    displayTable(plusedTable, "mbpp+");
-  displayTable(table, "full");
-
-//    clearChart();
-//    displayChart("mbpp+");
-    });
-
-displayTable(table, "premise-selection");
-
-window.addEventListener("resize", () => {
-  this.chart.resize();
+  clearTable();
+  displayTable(table, "full", slider.value - 1);
 });
+
+displayTable(table, "in-file", slider.value - 1);

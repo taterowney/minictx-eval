@@ -120,19 +120,28 @@
 <!--      <label class="btn btn-outline-primary" for="Average">Average</label>-->
     </div>
 <!--    <div id="chart" style="width: 100%; height: 600px"></div>-->
+    <div class="my-3 w-75">
+      <label for="bestOfRange" class="form-label">
+        Best-of-<span id="bestOfValue">1</span>:
+      </label>
+      <input type="range" class="form-range" id="bestOfRange" min="1" max="1" value="1">
+    </div>
     <div class="container-fluid d-flex flex-row flex-nowrap">
       <div class="container-fluid d-flex flex-column align-items-center">
+
+          <!-- <div class="container-fluid d-flex flex-row flex-nowrap">
+          <div class="container-fluid d-flex flex-column align-items-center">
+            <label for="results" class="text-success mb-3">⚡MiniCTX⚡</label>
+            <table id="results"
+              class="table table-responsive table-striped table-bordered flex-shrink-1 border border-success border-3">
+            </table>
+        </div> -->
+
         <label for="results" class="text-success mb-3">⚡MiniCTX⚡</label>
         <table id="results"
           class="table table-responsive table-striped table-bordered flex-shrink-1 border border-success border-3">
         </table>
       </div>
-<!--      <div class="container-fluid d-flex flex-column align-items-center">-->
-<!--        <label for="results" class="text-danger mb-3">Base Tests</label>-->
-<!--        <table id="results"-->
-<!--          class="table table-responsive table-striped table-bordered flex-shrink-1 border border-danger border-3">-->
-<!--        </table>-->
-<!--      </div>-->
     </div>
     <div id="notes">
       <h3>📝 Notes</h3>
