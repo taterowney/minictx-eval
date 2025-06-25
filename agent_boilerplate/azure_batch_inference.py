@@ -34,7 +34,7 @@ def upload_data(model, messages_list, job_tags={}, **kwargs):
     with open(jsonl_path, 'w') as f:
         for i, messages in enumerate(messages_list):
             for j in range(kwargs["n"]):
-                json.dump(
+                j = json.dumps(
                     {
                             "custom_id": f"job-{timestamp}-{i}-{j}",
                             "method": "POST",
@@ -43,9 +43,10 @@ def upload_data(model, messages_list, job_tags={}, **kwargs):
                                 "model": model,
                                 "messages": messages,
                             }
-                        },
-                    f
+                        }
                 )
+                j = j.encode('utf-16','surrogatepass').decode('utf-16')
+                f.write(j)
                 f.write("\n")
 
     response = client.files.create(

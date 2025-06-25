@@ -396,9 +396,9 @@ def eval_all():
 
 if __name__ == "__main__":
     # eval_at_best_of_n("output/FLT/03-06-2025-12-14:o4-mini-global-batch@8/results.jsonl")
-    eval_all()
-    import sys
-    sys.exit(0)
+    # eval_all()
+    # import sys
+    # sys.exit(0)
 
 
     import argparse
