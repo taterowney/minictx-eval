@@ -8,6 +8,10 @@
     "full": {
       "passed": [44],
       "total": 234
+    },
+    "premise-selection": {
+      "passed": [44],
+      "total": 334
     }
   }
 }

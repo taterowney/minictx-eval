@@ -124,7 +124,7 @@ const displayTable = (table, score, n) => {
 //      passCell.textContent = "⚡";
 //      passCell.classList.add("text-success");
 //    }
-    passCell.textContent += row[score]["passed"][n] + "/" + row[score]["total"] + " (" + Math.round((row[score]["passed"][n] / row[score]["total"]) * 1000) / 10 + "%)";  
+    passCell.textContent += Math.round((row[score]["passed"][n] / row[score]["total"]) * 1000) / 10 + "% (" + row[score]["passed"][n] + "/" + row[score]["total"] + ")";  
     dataRow.appendChild(passCell);
     tbody.appendChild(dataRow);
   });
@@ -132,8 +132,9 @@ const displayTable = (table, score, n) => {
 };
 
 
-const contextRadio = document.getElementById("context");
+const contextRadio = document.getElementById("inFile");
 const fullRepoRadio = document.getElementById("fullRepo");
+const premiseSelectionRadio = document.getElementById("premiseSelection");
 
 const slider      = document.getElementById("bestOfRange");
 const bestOfValue = document.getElementById("bestOfValue");
@@ -147,7 +148,7 @@ bestOfValue.textContent = "1";
 
 function renderForBestOfN(n) {
   clearTable();
-  const key = contextRadio.checked ? "in-file" : "full";
+  const key = contextRadio.checked ? "in-file" : (fullRepoRadio.checked ? "full" : "premise-selection");
   displayTable(table, key, n-1);
 }
 
@@ -165,6 +166,11 @@ contextRadio.addEventListener("click", function () {
 fullRepoRadio.addEventListener("click", function () {
   clearTable();
   displayTable(table, "full", slider.value - 1);
+});
+
+premiseSelectionRadio.addEventListener("click", function () {
+  clearTable();
+  displayTable(table, "premise-selection", slider.value - 1);
 });
 
 displayTable(table, "in-file", slider.value - 1);

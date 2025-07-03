@@ -10,7 +10,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/echarts@5.3.3/dist/echarts.min.js"></script>
 
-  <link rel="icon" href="https://images.emojiterra.com/google/noto-emoji/unicode-15/color/1024px/1f9d1-1f4bb.png" />
+  <!-- <link rel="icon" href="https://images.emojiterra.com/google/noto-emoji/unicode-15/color/1024px/1f9d1-1f4bb.png" /> -->
+  <link rel="icon" href="https://images.emojiterra.com/google/noto-emoji/unicode-16.0/bw/1024px/267e.png" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0/dist/css/bootstrap.min.css" />
 
   <link href="https://cdn.jsdelivr.net/npm/prismjs@v1.x/themes/prism.css" rel="stylesheet" />
@@ -112,10 +113,12 @@
       </a>
     </div>
     <div class="btn-group" role="group" id="Benchmark">
-      <input type="radio" class="btn-check" name="btnradio" id="context" checked />
-      <label class="btn btn-outline-primary" for="context">In-file context</label>
+      <input type="radio" class="btn-check" name="btnradio" id="inFile" checked />
+      <label class="btn btn-outline-primary" for="inFile">In-file context</label>
       <input type="radio" class="btn-check" name="btnradio" id="fullRepo" />
       <label class="btn btn-outline-primary" for="fullRepo">Full repository context</label>
+      <input type="radio" class="btn-check" name="btnradio" id="premiseSelection" />
+      <label class="btn btn-outline-primary" for="premiseSelection">Premise selection</label>
 <!--      <input type="radio" class="btn-check" name="btnradio" id="Average" />-->
 <!--      <label class="btn btn-outline-primary" for="Average">Average</label>-->
     </div>
