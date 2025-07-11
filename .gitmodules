@@ -22,3 +22,6 @@
 [submodule "repls/repl-4.16.0"]
 	path = repls/repl-4.16.0
 	url = https://github.com/leanprover-community/repl.git
+[submodule "repls/repl-4.16.0-rc1"]
+	path = repls/repl-4.16.0-rc1
+	url = https://github.com/taterowney/repl.git
