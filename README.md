@@ -49,30 +49,11 @@ This repository contains the evaluation scripts for [miniCTX: Neural Theorem Pro
 
 ## Evaluation
 
-### Edit the Script
-
-Open `scripts/evaluation.sh` and verify that the parameters are correctly set according to your setup. The script contains the following variables:
-
-- `TASK`: The model's task, selected from `tactic_prediction`, `tactic_prediction_context`, `full_proof`, `full_proof_context`.
-- `NUM_SAMPLES`: The number of proofs the model should try to generate (default: `32`).
-- `DATASET`: The name of the dataset (default: `mathlib`). MiniCTX-v2 supports `mathlib`, `carleson`, `ConNF`, `FLT`, `foundation`, `HepLean` (the former name of PhysLean), and `Seymour`. Use this and the `--dataset-path` flag to manually specify miniCTX-v1 or other datasets.
-- `MODEL`: The model name. Can be a locally-run model available on HuggingFace (e.g. `l3lab/ntp-mathlib-context-deepseek-coder-1.3b`), or an API-based model (e.g. `o4-mini`). Local models are evaluated using [vLLM](https://github.com/vllm-project/vllm) (use the `--vllm-mode offline`/`online` flag to run offline or online inference), while API models from OpenAI, Anthropic, or Google are supported. 
-
-Customization options for different paths, new datasets/projects, or different inference modes are available. To see all documentation, run `python check.py --help`. 
 
 ### Run the Script
 
-Make the script executable and run it:
-
 ```bash
-chmod +x scripts/evaluation.sh
-./scripts/evaluation.sh
-```
-
-Or run it directly with Python:
-
-```bash
-python check.py --task "full_proof_context" --dataset "mathlib" --model "o4-mini" --num-samples 32
+python check_new.py --task "full_proof_context" --dataset "mathlib" --model "o4-mini" --num-samples 32
 ```
 
 ### Output
