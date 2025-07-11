@@ -5,47 +5,31 @@ This repository contains the evaluation scripts for [miniCTX: Neural Theorem Pro
 ## Requirements
 
 - Python 3 (tested with 3.12.5)
-- PyTorch
 - Required Python packages (specified in `requirements.txt`)
-
-  ```bash
-  pip install -r requirements.txt
-  ```
-
 - Lean 4
 - [Mathlib 4](https://github.com/leanprover-community/mathlib4), [PrimeNumberTheoremAnd](https://github.com/AlexKontorovich/PrimeNumberTheoremAnd), [PFR](https://github.com/teorth/pfr), or any other Lean project to test
 - [Lean REPL](https://github.com/leanprover-community/repl)
 
 ## Environment Setup
 
-1. **Install Lean 4**
+1. **Install Python packages**
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. **Install Lean 4**
 
    Follow the instructions on the [Lean 4 installation page](https://leanprover.github.io/lean4/doc/quickstart.html) to set up Lean 4.
 
-2. **Set up and build your target Lean project(s)**
+3. **Set up and build your target Lean project(s)**
 
    MiniCTX uses examples from actual projects, so responses must be evaluated in the environment of these projects. To install these, run:
    ```bash
-   git submodule init
-   git submodule update
+   bash scripts/setup/build.sh
    ```
    > *Note: by default, this installs all the repositories necessary for miniCTX-v2, the most recent version of the dataset. If you want to run miniCTX-v1 as presented in the paper above, run `bash scripts/install_v1_environments.sh`*
 
-   Then build the project(s); for instance, for Mathlib:
-   ```bash
-   cd test-envs/minictx-v2/mathlib4
-   lake exe cache get
-   lake build
-   ```
-
-2. **Set up and build Lean REPL**
-
-   After running `git submodule init` and `git submodule update`:
-   
-   ```bash
-   cd repl
-   lake build
-   ```
 
 ## Evaluation
 
@@ -55,8 +39,7 @@ This repository contains the evaluation scripts for [miniCTX: Neural Theorem Pro
 ```bash
 python check_new.py --task "full_proof_context" --dataset "mathlib" --model "o4-mini" --num-samples 32
 ```
-
-### Output
+...or edit `scripts/evaluation.sh` and run (it does the same thing). 
 
 The output will be saved in a directory named `output/{name of the dataset}/{time}:{model}@{n}`.
 
